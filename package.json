@@ -1,0 +1,11 @@
+{
+  "name": "clicker",
+  "private": true,
+  "type": "module",
+  "description": "Phone-first incremental clicker game, installable as a PWA.",
+  "scripts": {
+    "start": "python3 -m http.server 8080",
+    "test": "node --test",
+    "icons": "node scripts/make-icons.mjs"
+  }
+}

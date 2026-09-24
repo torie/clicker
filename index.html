@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#070A08">
+<meta name="description" content="Tap the green button, build click factories, adopt the cat.">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Clicker">
+<title>Clicker</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=VT323&amp;family=IBM+Plex+Mono:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="styles.css">
+<script type="module" src="src/main.js"></script>
+</head>
+<body>
+<div class="app" id="app">
+
+  <section class="screen" id="screen-main" aria-label="Clicker">
+    <header class="top">
+      <span>HI <span class="vt hi" id="best">0</span></span>
+      <span class="top-right">
+        <span id="rate">+0/s</span>
+        <button class="icon-btn" id="music" aria-label="Music" aria-pressed="false">
+          <svg viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true"><g fill="currentColor"><rect x="6" y="2" width="7" height="2"></rect><rect x="6" y="4" width="2" height="7"></rect><rect x="11" y="4" width="2" height="6"></rect><rect x="3" y="10" width="5" height="3"></rect><rect x="8" y="9" width="5" height="3"></rect></g><rect class="mute" x="1" y="7" width="14" height="2" transform="rotate(-45 8 8)" fill="currentColor"></rect></svg>
+        </button>
+      </span>
+    </header>
+
+    <div class="goal" id="goal" role="group" aria-label="Stretch goal">
+      <div class="line"><span class="nm" id="goal-title">GOAL 1 &middot; 1,000,000</span><span class="vt goal-pct" id="goal-pct">0.0%</span></div>
+      <div class="gbar"><span id="goal-fill"></span></div>
+      <div class="line ds"><span id="goal-left"></span><span id="goal-eta"></span></div>
+      <div class="ds teaser">&#9656; <span id="goal-teaser"></span></div>
+    </div>
+    <button class="goalbtn" id="adopt" hidden><span class="vt">ADOPT THE CAT</span><small>1,000,000 &middot; IT CLICKS FOR YOU 50&times;/SEC</small></button>
+    <div class="goal done" id="goal-done" hidden><div class="line"><span class="nm">10,000,000 REACHED</span><span class="ds">NEXT CYCLE &middot; SOON</span></div></div>
+
+    <main class="play">
+      <div class="counter">
+        <div class="num" id="pts">0</div>
+        <div class="dim label">POINTS</div>
+      </div>
+      <div class="stage" id="stage">
+        <button class="big" id="big" aria-label="Click for points"><span class="face">CLICK</span><span class="sub" id="per-click">+1</span></button>
+        <div class="cat" id="cat" hidden>
+          <svg viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true"><g fill="currentColor"><rect x="4" y="2" width="2" height="2"></rect><rect x="10" y="2" width="2" height="2"></rect><rect x="3" y="4" width="10" height="6"></rect><rect x="4" y="10" width="8" height="5"></rect><rect x="12" y="11" width="2" height="2"></rect><rect x="13" y="8" width="2" height="4"></rect><rect x="4" y="15" width="3" height="1"></rect><rect x="9" y="15" width="3" height="1"></rect><rect class="paw" x="1" y="10" width="3" height="2"></rect></g><g fill="#070A08"><rect class="eye" x="5" y="6" width="2" height="2"></rect><rect class="eye" x="9" y="6" width="2" height="2"></rect><rect x="7" y="8" width="2" height="1"></rect></g></svg>
+          <span class="tag">CAT &times;50/s</span>
+        </div>
+      </div>
+    </main>
+
+    <section class="shop" aria-label="Shop">
+      <h2>&gt; SHOP <span class="cursor"></span></h2>
+      <div class="list">
+        <div class="sect">BUILDINGS</div>
+        <div class="rows" id="fac-rows"></div>
+        <button class="row" id="build-next">
+          <span class="line"><span class="nm" id="build-name">[BUILD] Click factory #1</span><span class="price" id="build-cost">500</span></span>
+          <span class="line"><span class="ds" id="build-desc"></span><span class="bar" id="build-bar"></span></span>
+        </button>
+        <div class="sect">UPGRADES</div>
+        <div class="rows" id="upg-rows"></div>
+      </div>
+    </section>
+  </section>
+
+  <section class="screen" id="screen-factory" aria-label="Click factory" hidden>
+    <header class="top">
+      <button class="back" id="back">&lt; BACK</button>
+      <span class="strong" id="fac-title">FACTORY #1</span>
+      <span>PTS <span class="vt hi" id="fac-pts">0</span></span>
+    </header>
+    <nav class="slots" id="slots" aria-label="Your factories"></nav>
+    <div class="plant">
+      <div class="chimney"><span class="puff"></span><span class="puff b"></span></div>
+      <div class="roof"><span></span><span></span><span></span><span></span><span></span><span></span></div>
+      <div class="hall" id="hall">
+        <div class="bays" id="bays"></div>
+        <div class="silo" id="silo">
+          <span class="lab" id="silo-label">SILO</span>
+          <span class="tube"><span class="level" id="silo-level"></span></span>
+          <span class="vt silo-pct" id="silo-pct">0%</span>
+        </div>
+      </div>
+    </div>
+    <div class="fstats">
+      <span><span class="dim">MAKES</span> <span id="fac-rate">+0/s</span></span>
+      <span><span class="dim">STORED</span> <span id="fac-store">0 / 0</span></span>
+    </div>
+    <div class="stage collect-stage" id="collect-stage">
+      <button class="collect" id="collect">COLLECT +0</button>
+    </div>
+    <section class="shop ext" aria-label="Extensions">
+      <h2>&gt; EXTENSIONS <span class="cursor"></span></h2>
+      <div class="list rows" id="ext-rows"></div>
+    </section>
+  </section>
+
+  <div class="boot" id="boot" role="dialog" aria-modal="true" aria-label="You adopted the cat" hidden></div>
+  <div class="toast" id="toast" role="status" hidden></div>
+</div>
+</body>
+</html>
