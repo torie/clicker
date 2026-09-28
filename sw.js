@@ -1,6 +1,7 @@
 // Offline support: serve from cache, refresh the cache in the background.
-// Bump VERSION when shipping so old caches are cleared.
-const VERSION = 'clicker-v10';
+// Bump VERSION when shipping. The new worker then downloads the new files and waits; the game shows
+// "NEW VERSION · TAP TO RELOAD", and tapping it tells the worker to take over (SKIP_WAITING).
+const VERSION = 'clicker-v11';
 const SHELL = [
   './',
   './index.html',
@@ -18,7 +19,13 @@ const SHELL = [
 const FONT_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com'];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(VERSION).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting()));
+  // cache: 'reload' skips the browser's HTTP cache (GitHub Pages allows 10 minutes), so the new
+  // version really gets the new files.
+  event.waitUntil(caches.open(VERSION).then((cache) => cache.addAll(SHELL.map((url) => new Request(url, { cache: 'reload' })))));
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {

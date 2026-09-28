@@ -22,7 +22,7 @@ Phone-first incremental clicker game, shipped as a PWA on GitHub Pages. Plain HT
 | `src/audio/soundtrack.js` | Web Audio chip synth (pulse lead, pulse arpeggio, triangle bass, noise drums). API: `createSoundtrack(song)`, then `start/stop/toggle/setSong/setVolume/jumpTo/onStep`. |
 | `src/audio/songs.js` | The four songs as data (per-bar chord + melody + voice styles; notation documented at the top). Silo Shuffle 104 BPM, 2:46 loop · Kitten Cruise 88 BPM, 2:00 · Neon Commute 126 BPM, 1:31 · Lullaby.exe 76 BPM, 2:06. `test/songs.test.js` checks every bar adds up to 16 steps and every chord exists. |
 | `src/skins.js` | The cat's pixel art per skin (`catSvg(id)`), built on one shared 16×16 shape. |
-| `sw.js` | Cache-first service worker with background refresh. **Bump `VERSION` on every release.** |
+| `sw.js` | Cache-first service worker with background refresh. **Bump `VERSION` on every release**: the new worker pre-caches fresh files (bypassing the HTTP cache) and waits; `main.js` shows the "NEW VERSION · TAP TO RELOAD" banner (`#update`) and sends `SKIP_WAITING` when tapped, then reloads on `controllerchange`. It only registers over HTTPS, so test it by temporarily allowing localhost. |
 | `scripts/balance-sim.mjs` | Greedy-player simulation against the real rules. Run it after any price or rate change. |
 | `scripts/make-icons.mjs` | Regenerates `icons/*.png` (pixel "+1" button). |
 
@@ -83,7 +83,7 @@ Design references (private claude.ai artifacts owned by the user):
 ## Status (2026-09-28)
 
 - `18351bd` (the game, PWA, tests, README) is pushed to `origin/main`.
-- Committed on `main` (not pushed): this file, `scripts/balance-sim.mjs`, the 10M Store (skins, jukebox with three new songs, purchase confirmation, goal 3 at 100M), the kitten crew with one hired kitten per factory, and the main-screen layout fix (number and button size to the space left, via container units). `sw.js` cache `clicker-v10`.
+- Committed on `main` (not pushed): this file, `scripts/balance-sim.mjs`, the 10M Store (skins, jukebox with three new songs, purchase confirmation, goal 3 at 100M), the kitten crew with one hired kitten per factory, and the main-screen layout fix (number and button size to the space left, via container units). `sw.js` cache `clicker-v11` (with the update banner).
 - Tested in a desktop browser at phone size: fresh game, late-game save, factory, collecting, cat, welcome-back toast, store unlock, buying and wearing a skin, previewing and buying a track, crew start with the free kitten and food lesson, hiring, hungry alert and badge, feeding, sleep lesson and napping, play lesson and the yarn game, factory rows run by the crew. Audio has never been listened to by an agent, only checked for errors. **Not yet tested on a real phone** or as an installed PWA.
 
 ## Suggested next steps

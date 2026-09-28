@@ -26,7 +26,7 @@ The tests cover the game rules and balance in `src/game.js`.
 2. In the repo, go to **Settings → Pages**, choose **Deploy from a branch**, then pick `main` and `/ (root)`.
 3. The game is served at `https://<user>.github.io/<repo>/`. On a phone, open it and use **Add to Home Screen** (iOS Safari) or **Install app** (Android Chrome).
 
-When you ship a change, bump `VERSION` in `sw.js` so installed copies pick it up.
+When you ship a change, bump `VERSION` in `sw.js`. Players then see **NEW VERSION · TAP TO RELOAD** at the bottom of the screen once the update has downloaded (the game checks each time it's reopened, and every 30 minutes). Tapping it saves and switches over. Copies installed before this banner existed need one last full close and reopen to get it.
 
 ## Project layout
 

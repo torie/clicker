@@ -877,6 +877,32 @@ if (welcome && (welcome.points >= 1 || welcome.stored >= 1)) {
   showToast('WELCOME BACK · ' + parts.join(' · '));
 }
 
+// Offline support and updates. A new version downloads in the background; the banner lets the player
+// switch to it straight away (their progress is saved first).
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('./sw.js').catch(() => { /* offline support is optional */ });
+  let waiting = null, reloadWanted = false;
+  const offerUpdate = (worker) => { waiting = worker; $('update').hidden = false; };
+  navigator.serviceWorker.register('./sw.js').then((reg) => {
+    if (reg.waiting && navigator.serviceWorker.controller) offerUpdate(reg.waiting);
+    reg.addEventListener('updatefound', () => {
+      const w = reg.installing;
+      if (!w) return;
+      w.addEventListener('statechange', () => {
+        if (w.state === 'installed' && navigator.serviceWorker.controller) offerUpdate(w); // not on the very first install
+      });
+    });
+    const check = () => reg.update().catch(() => { /* offline: try again later */ });
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
+    setInterval(check, 30 * 60 * 1000);
+  }).catch(() => { /* offline support is optional */ });
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (reloadWanted) location.reload();
+  });
+  $('update').addEventListener('click', () => {
+    save();
+    reloadWanted = true;
+    $('update').textContent = 'UPDATING...';
+    if (waiting) waiting.postMessage({ type: 'SKIP_WAITING' });
+    else location.reload();
+  });
 }
