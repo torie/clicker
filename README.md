@@ -1,8 +1,8 @@
 # Clicker
 
-A phone-first incremental clicker game, installable as a PWA. Tap the green button, build up to five click factories, collect what they make, and reach 1,000,000 to adopt a cat that clicks for you.
+A phone-first incremental clicker game, installable as a PWA. Tap the green button, build up to five click factories, collect what they make, reach 1,000,000 to adopt a cat that clicks for you, then hire kittens to run your factories and look after them on the way to 100,000,000.
 
-Plain HTML, CSS and JavaScript modules, with no build step and no dependencies. The soundtrack ("Silo Shuffle") is synthesised live with Web Audio, so there are no audio files.
+Plain HTML, CSS and JavaScript modules, with no build step and no dependencies. The music (four tracks, three of them unlocked in the 10M store) is synthesised live with Web Audio, so there are no audio files.
 
 ## Run locally
 
@@ -32,10 +32,11 @@ When you ship a change, bump `VERSION` in `sw.js` so installed copies pick it up
 
 | Path | What it is |
 | --- | --- |
-| `index.html`, `styles.css` | The two screens (main and factory) and the Phosphor look |
+| `index.html`, `styles.css` | The four screens (main, factory, crew, store) and the Phosphor look |
 | `src/game.js` | Rules, balance, save format, offline progress |
 | `src/main.js` | UI, game loop, saving, music toggle |
-| `src/audio/soundtrack.js` | The looping 8-bit soundtrack |
+| `src/audio/soundtrack.js`, `src/audio/songs.js` | The chip-music synth and the four songs |
+| `src/skins.js` | Cat skins for the store |
 | `sw.js`, `manifest.webmanifest`, `icons/` | PWA: offline cache, install metadata, icons |
 | `scripts/make-icons.mjs` | Regenerates the icons (`npm run icons`) |
 

@@ -27,6 +27,13 @@
       <span>HI <span class="vt hi" id="best">0</span></span>
       <span class="top-right">
         <span id="rate">+0/s</span>
+        <button class="icon-btn crew-btn" id="open-crew" aria-label="Kitten crew" hidden>
+          <svg viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true"><g fill="currentColor"><rect x="3" y="2" width="2" height="3"></rect><rect x="11" y="2" width="2" height="3"></rect><rect x="6" y="1" width="4" height="3"></rect><rect x="4" y="7" width="8" height="7"></rect><rect x="3" y="9" width="10" height="4"></rect></g></svg>
+          <span class="badge" id="crew-badge" hidden>0</span>
+        </button>
+        <button class="icon-btn store-btn" id="open-store" aria-label="Store: cat skins and music" hidden>
+          <svg viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true"><g fill="currentColor"><rect x="6" y="1" width="4" height="1"></rect><rect x="5" y="2" width="1" height="4"></rect><rect x="10" y="2" width="1" height="4"></rect><rect x="2" y="5" width="12" height="10"></rect></g><rect x="5" y="8" width="6" height="1" fill="#070A08"></rect></svg>
+        </button>
         <button class="icon-btn" id="music" aria-label="Music" aria-pressed="false">
           <svg viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true"><g fill="currentColor"><rect x="6" y="2" width="7" height="2"></rect><rect x="6" y="4" width="2" height="7"></rect><rect x="11" y="4" width="2" height="6"></rect><rect x="3" y="10" width="5" height="3"></rect><rect x="8" y="9" width="5" height="3"></rect></g><rect class="mute" x="1" y="7" width="14" height="2" transform="rotate(-45 8 8)" fill="currentColor"></rect></svg>
         </button>
@@ -40,7 +47,8 @@
       <div class="ds teaser">&#9656; <span id="goal-teaser"></span></div>
     </div>
     <button class="goalbtn" id="adopt" hidden><span class="vt">ADOPT THE CAT</span><small>1,000,000 &middot; IT CLICKS FOR YOU 50&times;/SEC</small></button>
-    <div class="goal done" id="goal-done" hidden><div class="line"><span class="nm">10,000,000 REACHED</span><span class="ds">NEXT CYCLE &middot; SOON</span></div></div>
+    <button class="crew-alert" id="crew-alert" hidden><span id="crew-alert-text"></span><span class="vt" aria-hidden="true">&#9656;</span></button>
+    <div class="goal done" id="goal-done" hidden><div class="line"><span class="nm">100,000,000 REACHED</span><span class="ds">NEXT CYCLE &middot; SOON</span></div></div>
 
     <main class="play">
       <div class="counter">
@@ -50,7 +58,7 @@
       <div class="stage" id="stage">
         <button class="big" id="big" aria-label="Click for points"><span class="face">CLICK</span><span class="sub" id="per-click">+1</span></button>
         <div class="cat" id="cat" hidden>
-          <svg viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true"><g fill="currentColor"><rect x="4" y="2" width="2" height="2"></rect><rect x="10" y="2" width="2" height="2"></rect><rect x="3" y="4" width="10" height="6"></rect><rect x="4" y="10" width="8" height="5"></rect><rect x="12" y="11" width="2" height="2"></rect><rect x="13" y="8" width="2" height="4"></rect><rect x="4" y="15" width="3" height="1"></rect><rect x="9" y="15" width="3" height="1"></rect><rect class="paw" x="1" y="10" width="3" height="2"></rect></g><g fill="#070A08"><rect class="eye" x="5" y="6" width="2" height="2"></rect><rect class="eye" x="9" y="6" width="2" height="2"></rect><rect x="7" y="8" width="2" height="1"></rect></g></svg>
+          <span class="cat-art" id="cat-art"></span>
           <span class="tag">CAT &times;50/s</span>
         </div>
       </div>
@@ -102,6 +110,82 @@
       <div class="list rows" id="ext-rows"></div>
     </section>
   </section>
+
+  <section class="screen" id="screen-crew" aria-label="Kitten crew" hidden>
+    <header class="top">
+      <button class="back" id="crew-back">&lt; BACK</button>
+      <span class="strong">KITTEN CREW</span>
+      <span>PTS <span class="vt hi" id="crew-pts">0</span></span>
+    </header>
+    <div class="store-body">
+      <div class="lesson-card" id="lesson-card">
+        <div class="sect" id="lesson-step">LESSON 1 OF 3</div>
+        <div class="nm" id="lesson-title"></div>
+        <p class="ds" id="lesson-text"></p>
+        <p class="ds next" id="lesson-next"></p>
+      </div>
+      <div class="focus">
+        <div class="line"><span class="nm">CAT FOCUS</span><span class="vt" id="focus-pct">100%</span></div>
+        <div class="gbar"><span id="focus-fill"></span></div>
+        <div class="ds" id="focus-text"></div>
+      </div>
+      <button class="collect" id="feed-all" hidden>FEED ALL</button>
+      <div class="rows" id="kitten-rows"></div>
+      <div class="sect" id="hire-title">HIRE A KITTEN FOR EACH FACTORY</div>
+      <div class="rows" id="hire-rows"></div>
+    </div>
+  </section>
+
+  <section class="screen" id="screen-store" aria-label="Store" hidden>
+    <header class="top">
+      <button class="back" id="store-back">&lt; BACK</button>
+      <span class="strong">STORE</span>
+      <span>PTS <span class="vt hi" id="store-pts">0</span></span>
+    </header>
+    <div class="store-body">
+      <p class="store-note">Just for fun: skins and music don't change your score.</p>
+      <h2>&gt; CAT SKINS</h2>
+      <div class="skin-grid" id="skin-grid"></div>
+      <h2>&gt; JUKEBOX</h2>
+      <div class="rows" id="track-rows"></div>
+    </div>
+  </section>
+
+  <div class="sheet-backdrop" id="confirm" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+      <div class="sheet-art" id="confirm-art"></div>
+      <h3 id="confirm-title">BUY?</h3>
+      <p class="ds" id="confirm-desc"></p>
+      <button class="preview wide" id="confirm-preview" hidden>&#9654; PREVIEW 20s</button>
+      <p class="sheet-price"><span>COSTS <span class="vt" id="confirm-price">0</span></span><span id="confirm-have"></span></p>
+      <div class="sheet-actions">
+        <button class="back" id="confirm-cancel">CANCEL</button>
+        <button class="collect" id="confirm-buy">BUY</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="sheet-backdrop" id="lesson" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="lesson-dlg-title">
+      <div class="sheet-art" id="lesson-art"></div>
+      <div class="sect center" id="lesson-dlg-step">NEW LESSON</div>
+      <h3 id="lesson-dlg-title">FOOD</h3>
+      <p class="ds" id="lesson-dlg-text"></p>
+      <div class="sheet-actions">
+        <button class="back" id="lesson-later">LATER</button>
+        <button class="collect" id="lesson-go">SEE THE CREW</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="sheet-backdrop" id="play" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="play-title">
+      <h3 id="play-title">PLAY WITH MOCHI</h3>
+      <p class="ds">Catch the yarn ball <span id="play-left">5</span> more times.</p>
+      <div class="yard" id="yard"><button class="yarn" id="yarn" aria-label="Yarn ball"><svg viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true"><g fill="currentColor"><rect x="5" y="2" width="6" height="1"></rect><rect x="3" y="3" width="10" height="2"></rect><rect x="2" y="5" width="12" height="6"></rect><rect x="3" y="11" width="10" height="2"></rect><rect x="5" y="13" width="6" height="1"></rect></g><g fill="#0B120D"><rect x="4" y="5" width="8" height="1"></rect><rect x="3" y="8" width="10" height="1"></rect><rect x="5" y="11" width="6" height="1"></rect></g><rect x="13" y="12" width="3" height="1" fill="currentColor"></rect></svg></button></div>
+      <div class="sheet-actions one"><button class="back" id="play-stop">STOP PLAYING</button></div>
+    </div>
+  </div>
 
   <div class="boot" id="boot" role="dialog" aria-modal="true" aria-label="You adopted the cat" hidden></div>
   <div class="toast" id="toast" role="status" hidden></div>

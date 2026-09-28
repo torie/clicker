@@ -1,6 +1,6 @@
 // Offline support: serve from cache, refresh the cache in the background.
 // Bump VERSION when shipping so old caches are cleared.
-const VERSION = 'clicker-v1';
+const VERSION = 'clicker-v8';
 const SHELL = [
   './',
   './index.html',
@@ -9,6 +9,8 @@ const SHELL = [
   './src/main.js',
   './src/game.js',
   './src/audio/soundtrack.js',
+  './src/audio/songs.js',
+  './src/skins.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/apple-touch-icon.png'
