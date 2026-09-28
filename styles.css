@@ -237,9 +237,9 @@ button:focus-visible { outline: 2px dashed var(--amber); outline-offset: 3px; }
 .roof { display: flex; height: 22px; margin-right: 84px; }
 .roof span { flex: 1; background: var(--rule); clip-path: polygon(0 100%, 100% 0, 100% 100%); }
 .chimney { position: absolute; right: 26px; top: -30px; width: 22px; height: 30px; border: 2px solid var(--phos); border-bottom: 0; background: var(--ground); }
-.puff { position: absolute; left: 3px; top: -14px; width: 12px; height: 12px; border-radius: 50%; background: var(--rule-2); animation: puff 2.4s linear infinite; }
+.puff { position: absolute; left: 3px; top: -8px; width: 12px; height: 12px; border-radius: 50%; background: var(--rule-2); animation: puff 2.4s linear infinite; }
 .puff.b { animation-delay: -1.2s; }
-@keyframes puff { 0% { transform: translate(0, 0) scale(.6); opacity: .9; } 100% { transform: translate(18px, -20px) scale(1.6); opacity: 0; } }
+@keyframes puff { 0% { transform: translate(0, 0) scale(.6); opacity: .9; } 100% { transform: translate(20px, -12px) scale(1.5); opacity: 0; } }
 .hall {
   display: grid; grid-template-columns: minmax(0, 1fr) 64px; gap: 10px; padding: 12px;
   border: 2px solid var(--phos); background: var(--hall); box-shadow: 0 0 30px rgba(57, 255, 106, .15);
@@ -322,6 +322,48 @@ button:focus-visible { outline: 2px dashed var(--amber); outline-offset: 3px; }
   font-family: var(--pixel); font-size: 22px; cursor: pointer; touch-action: manipulation;
 }
 .preview[aria-pressed="true"] { border-color: var(--amber); color: var(--amber); }
+
+/* ---------- a factory run by a kitten ---------- */
+.hall { position: relative; }
+.hall.crewed { border-color: var(--amber); box-shadow: 0 0 30px rgba(255, 190, 80, .2); }
+.hall-tag {
+  position: absolute; left: 10px; top: -11px; padding: 1px 8px; background: var(--ground);
+  border: 1px solid var(--amber); color: var(--amber); font-size: 10px; font-weight: 600; letter-spacing: .12em; white-space: nowrap;
+}
+.silo.auto .tube { border-color: var(--amber); }
+.silo.auto .lab, .silo.auto .silo-pct { color: var(--amber); }
+.silo.auto .level {
+  height: 100% !important; opacity: .55;
+  background: repeating-linear-gradient(180deg, var(--amber) 0 4px, transparent 4px 10px);
+  animation: chute .5s linear infinite;
+}
+@keyframes chute { to { background-position: 0 10px; } }
+.manager {
+  margin: 0 16px; padding: 10px 12px; display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 12px; align-items: start;
+  border: 2px solid var(--amber); border-radius: 2px; background: #1C1608; box-shadow: 0 0 24px rgba(255, 190, 80, .15);
+}
+.manager.care { border-color: var(--alarm); background: #1C1A08; animation: alarmrow .8s steps(1) infinite; }
+.manager.nap { border-style: dashed; animation: none; }
+.mgr-art { width: 56px; height: 56px; padding: 0; border: 0; background: transparent; cursor: pointer; animation: bob .5s steps(2) infinite; }
+.manager.care .mgr-art, .manager.nap .mgr-art { animation: none; }
+.manager.nap .mgr-art { opacity: .6; }
+.mgr-art svg { width: 56px; height: 56px; display: block; }
+.mgr-body { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.mgr-body .nm { color: var(--amber); font-size: 13px; }
+.manager.care .mgr-body .nm, .manager.care .mgr-body .ds { color: var(--alarm); }
+.mgr-boost { font-size: 24px; line-height: 1; color: var(--amber); }
+.mgr-body .ds { color: var(--text); }
+.mgr-needs { display: flex; flex-direction: column; gap: 3px; }
+.mgr-needs .need { grid-template-columns: 40px minmax(0, 1fr); font-size: 10px; }
+.manager .care { min-height: 36px; padding: 0 10px; font-size: 11px; }
+.ext-note { margin: -2px 0 0; font-size: 11px; color: var(--amber); letter-spacing: .04em; }
+/* The factory screen's blocks keep their size; if a short phone runs out of room the screen scrolls
+   instead of squeezing the manager card into the collect button. */
+#screen-factory { overflow-y: auto; }
+#screen-factory > *:not(.shop) { flex-shrink: 0; }
+.manager + .collect-stage, #mgr-hire-box + .collect-stage { margin-top: 10px; }
+#mgr-hire-box { padding: 0 16px; }
+@media (prefers-reduced-motion: reduce) { .silo.auto .level, .mgr-art, .manager.care { animation: none; } }
 
 /* ---------- kitten crew (from 10M) ---------- */
 .crew-btn { position: relative; color: var(--amber); border-color: var(--rule-2); }
@@ -444,6 +486,9 @@ button:focus-visible { outline: 2px dashed var(--amber); outline-offset: 3px; }
   .goal .teaser { display: none; }
   .collect { height: 52px; }
   .shop { height: clamp(200px, 32dvh, 300px); }
+  .manager.care .mgr-needs, .manager.care .ds, .manager.nap .mgr-needs { display: none; }
+  .manager { padding: 8px 10px; grid-template-columns: 44px minmax(0, 1fr); }
+  .mgr-art, .mgr-art svg { width: 44px; height: 44px; }
   .crew-alert { min-height: 38px; padding: 6px 12px; margin-top: 6px; }
 }
 

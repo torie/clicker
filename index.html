@@ -90,6 +90,7 @@
       <div class="chimney"><span class="puff"></span><span class="puff b"></span></div>
       <div class="roof"><span></span><span></span><span></span><span></span><span></span><span></span></div>
       <div class="hall" id="hall">
+        <span class="hall-tag" id="hall-tag" hidden></span>
         <div class="bays" id="bays"></div>
         <div class="silo" id="silo">
           <span class="lab" id="silo-label">SILO</span>
@@ -100,13 +101,24 @@
     </div>
     <div class="fstats">
       <span><span class="dim">MAKES</span> <span id="fac-rate">+0/s</span></span>
-      <span><span class="dim">STORED</span> <span id="fac-store">0 / 0</span></span>
+      <span><span class="dim" id="fac-store-label">STORED</span> <span id="fac-store">0 / 0</span></span>
     </div>
+    <div class="manager" id="manager" hidden>
+      <button class="mgr-art" id="mgr-art" aria-label="Open the kitten crew"></button>
+      <div class="mgr-body">
+        <div class="line"><span class="nm" id="mgr-title">MOCHI RUNS THIS FACTORY</span><span class="vt mgr-boost" id="mgr-boost"></span></div>
+        <div class="ds" id="mgr-desc"></div>
+        <div class="mgr-needs" id="mgr-needs"></div>
+        <div class="care-actions" id="mgr-actions"></div>
+      </div>
+    </div>
+    <div class="collect-stage" id="mgr-hire-box" hidden></div>
     <div class="stage collect-stage" id="collect-stage">
       <button class="collect" id="collect">COLLECT +0</button>
     </div>
     <section class="shop ext" aria-label="Extensions">
       <h2>&gt; EXTENSIONS <span class="cursor"></span></h2>
+      <p class="ext-note" id="ext-note" hidden></p>
       <div class="list rows" id="ext-rows"></div>
     </section>
   </section>

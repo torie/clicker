@@ -336,48 +336,118 @@ function renderSlot(el, i) {
   }
 }
 
+// The manager card: when a kitten runs this factory it takes the collect button's place.
+const mgrNeeds = {};
+for (const n of G.NEEDS) {
+  const row = h('div', 'need'), fill = h('span'), meter = h('span', 'meter');
+  meter.appendChild(fill);
+  row.append(h('span', null, n.name.toUpperCase()), meter);
+  $('mgr-needs').appendChild(row);
+  mgrNeeds[n.id] = { row, fill };
+}
+const mgrFeed = h('button', 'care'), mgrNap = h('button', 'care', 'NAP'), mgrPlay = h('button', 'care', 'PLAY');
+const mgrKitten = () => state.crew.indexOf(G.kittenAt(state, ui.cur));
+mgrFeed.addEventListener('click', () => { if (G.feedKitten(state, mgrKitten())) { save(); render(); } });
+mgrNap.addEventListener('click', () => { if (G.napKitten(state, mgrKitten())) { save(); render(); } });
+mgrPlay.addEventListener('click', () => openPlay(mgrKitten()));
+$('mgr-actions').append(mgrFeed, mgrNap, mgrPlay);
+$('mgr-art').addEventListener('click', () => openCrew());
+const mgrHire = makeRow(() => { if (G.hireKitten(state, ui.cur)) { flash('kitten-' + (state.crew.length - 1)); save(); render(); } });
+$('mgr-hire-box').appendChild(mgrHire.el);
+
+function renderManager(f) {
+  const s = state, k = G.kittenAt(s, ui.cur), idx = s.crew.indexOf(k);
+  set($('manager'), 'hidden', !k);
+  set($('mgr-hire-box'), 'hidden', !G.crewOn(s) || !!k);
+  if (!k) {
+    if (G.crewOn(s)) {
+      const cost = G.hireCost(ui.cur);
+      setRow(mgrHire, { cls: s.pts >= cost ? 'ok' : 'no', nm: 'Hire a kitten to run this factory', price: G.fmt(cost),
+        ds: '×' + G.KITTEN_BOOST + ' SPEED · SHIPS EVERYTHING · NO MORE COLLECTING', bar: bar(s.pts / cost) });
+    }
+    return;
+  }
+  const nap = G.napping(k), care = G.needsCare(s, k), name = k.name.toUpperCase();
+  if ($('mgr-art')._k !== idx) {
+    $('mgr-art')._k = idx;
+    $('mgr-art').innerHTML = KITTEN_SVG;
+    $('mgr-art').style.color = kittenColor(idx);
+  }
+  set($('manager'), 'class', 'manager' + (care ? ' care' : nap ? ' nap' : ''));
+  set($('mgr-title'), 'text', care ? name + ' IS ' + careWord(k) : nap ? name + ' IS NAPPING · ' + Math.ceil(k.nap) + 's' : name + ' RUNS THIS FACTORY');
+  set($('mgr-boost'), 'text', care || nap ? 'PAUSED' : '×' + G.KITTEN_BOOST);
+  set($('mgr-desc'), 'text', care ? 'Collect by hand until ' + k.name + ' is looked after.'
+    : nap ? 'Collect by hand until ' + k.name + ' wakes up.' : 'Everything ships to you automatically. Nothing to collect.');
+  for (const n of G.NEEDS) {
+    const active = s.lessons > G.NEEDS.indexOf(n), v = k[n.id], row = mgrNeeds[n.id];
+    set(row.row, 'hidden', !active);
+    set(row.row, 'class', 'need' + (v < G.LOW_NEED ? ' low' : '') + (v <= 0 ? ' empty' : ''));
+    set(row.fill, 'width', (v * 100).toFixed(1) + '%');
+  }
+  set(mgrFeed, 'hidden', s.lessons < 1);
+  set(mgrFeed, 'text', 'FEED · ' + G.fmt(G.FEED_COST));
+  set(mgrFeed, 'disabled', nap || k.food >= 1 || s.pts < G.FEED_COST);
+  set(mgrFeed, 'class', 'care' + (k.food < G.LOW_NEED && !nap ? ' urgent' : ''));
+  set(mgrNap, 'hidden', s.lessons < 2);
+  set(mgrNap, 'disabled', nap || k.sleep >= 1);
+  set(mgrNap, 'class', 'care' + (k.sleep < G.LOW_NEED && !nap ? ' urgent' : ''));
+  set(mgrPlay, 'hidden', s.lessons < 3);
+  set(mgrPlay, 'disabled', nap || k.fun >= 0.98);
+  set(mgrPlay, 'class', 'care' + (k.fun < G.LOW_NEED && !nap ? ' urgent' : ''));
+}
+
 function renderFactory() {
   const s = state, f = s.facs[ui.cur];
   if (!f) { ui.view = 'main'; return; }
   const c = G.siloCap(f), full = f.store >= c, pct = Math.round(Math.min(1, f.store / c) * 100);
+  const k = G.kittenAt(s, ui.cur), run = !!(k && f.kitOn); // run: a kitten is running the whole factory right now
   set($('fac-title'), 'text', 'FACTORY #' + (ui.cur + 1));
   set($('fac-pts'), 'text', G.fmt(s.pts));
   slots.forEach(renderSlot);
 
-  // Belt speed follows turbo presses and kittens; tokens are spread evenly along the belt.
-  const d = 3 / Math.pow(2, f.turbo) / (f.kitOn ? 2 : 1); // a working kitten visibly speeds the belts up
-  set($('hall'), 'class', 'hall' + (full ? ' paused' : ''));
-  set($('hall').parentElement, 'class', 'plant' + (full ? ' paused' : ''));
+  // Belt speed follows turbo presses and the kitten; tokens are spread evenly along the belt.
+  const d = 3 / Math.pow(2, f.turbo) / (run ? 2 : 1);
+  const stalled = full && !run;
+  set($('hall'), 'class', 'hall' + (stalled ? ' paused' : '') + (run ? ' crewed' : ''));
+  set($('hall').parentElement, 'class', 'plant' + (stalled ? ' paused' : ''));
   set($('hall'), '--belt', d + 's');
   set($('hall'), '--press', (d / 4).toFixed(3) + 's');
+  set($('hall-tag'), 'hidden', !run);
+  if (run) set($('hall-tag'), 'text', 'RUN BY ' + k.name.toUpperCase() + ' · ×' + G.KITTEN_BOOST);
   bays.forEach((b, i) => {
     const on = i < f.lines;
     set(b.el, 'class', 'bay' + (on ? '' : ' empty'));
-    set(b.kit, 'hidden', !(i === 0 && f.kitOn)); // the factory's kitten sits at the first belt while it works
+    set(b.kit, 'hidden', true); // the kitten runs the whole factory: it's shown on the manager card, not at one belt
     set(b.press, 'hidden', !on);
     set(b.belt, 'hidden', !on);
     set(b.empty, 'hidden', on);
-    b.toks.forEach((t, k) => set(t, 'animationDelay', '-' + (k * d / 4).toFixed(3) + 's'));
+    b.toks.forEach((t, j) => set(t, 'animationDelay', '-' + (j * d / 4).toFixed(3) + 's'));
   });
-  set($('silo'), 'class', 'silo' + (full ? ' full' : ''));
-  set($('silo-label'), 'text', full ? 'FULL' : 'SILO');
+  // Run by a kitten, the silo becomes a chute that ships straight out.
+  set($('silo'), 'class', 'silo' + (run ? ' auto' : full ? ' full' : ''));
+  set($('silo-label'), 'text', run ? 'AUTO' : full ? 'FULL' : 'SILO');
   set($('silo-level'), 'height', pct + '%');
-  set($('silo-pct'), 'text', pct + '%');
+  set($('silo-pct'), 'text', run ? 'SHIP' : pct + '%');
   set($('fac-rate'), 'text', '+' + G.fmt(G.factoryRate(f)) + '/s');
-  set($('fac-store'), 'text', G.fmt(f.store) + ' / ' + G.fmt(c));
-  const crewKitten = f.kitOn && G.kittenAt(s, ui.cur);
-  set($('collect'), 'text', crewKitten ? crewKitten.name.toUpperCase() + ' SHIPS IT ALL' : 'COLLECT +' + G.fmt(f.store));
+  set($('fac-store-label'), 'text', run ? 'SHIPS' : 'STORED');
+  set($('fac-store'), 'text', run ? 'EVERYTHING' : G.fmt(f.store) + ' / ' + G.fmt(c));
+  renderManager(f);
+  set($('collect-stage'), 'hidden', run);
+  set($('collect'), 'text', 'COLLECT +' + G.fmt(f.store));
   set($('collect'), 'class', 'collect' + (full ? ' full' : ''));
   set($('collect'), 'disabled', f.store < 1);
 
+  set($('ext-note'), 'hidden', !k);
+  if (k) set($('ext-note'), 'text', k.name.toUpperCase() + ' USES YOUR UPGRADES TOO: MORE LINES AND TURBO PRESSES MAKE IT RUN EVEN FASTER');
   G.EXTENSIONS.forEach((e, i) => {
     const locked = G.extensionLocked(s, e), maxed = G.extensionMaxed(f, e), cost = G.extensionCost(e, f);
+    const moot = (e.id === 'dock' || e.id === 'silo') && run; // nothing is stored while a kitten ships it all
     setRow(extRows[i], {
-      cls: (locked ? 'locked' : maxed ? 'maxed' : s.pts >= cost ? 'ok' : 'no') + (e.needsCat ? ' kitten' : '') + flashCls(e.id),
+      cls: (locked ? 'locked' : maxed ? 'maxed' : s.pts >= cost ? 'ok' : 'no') + flashCls(e.id),
       disabled: locked || maxed,
       nm: '[' + f[e.id] + '/' + e.max + '] ' + (locked ? '████████ ???' : e.name),
       price: maxed ? 'MAX' : G.fmt(cost),
-      ds: locked ? 'UNLOCKS WITH GOAL 1' : e.desc,
+      ds: locked ? 'UNLOCKS WITH GOAL 1' : moot ? 'Only helps when ' + k.name + ' is off duty' : e.desc,
       bar: locked || maxed ? '' : bar(s.pts / cost)
     });
   });

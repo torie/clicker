@@ -1,6 +1,6 @@
 // Offline support: serve from cache, refresh the cache in the background.
 // Bump VERSION when shipping so old caches are cleared.
-const VERSION = 'clicker-v8';
+const VERSION = 'clicker-v10';
 const SHELL = [
   './',
   './index.html',
