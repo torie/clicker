@@ -276,3 +276,57 @@ The user noticed that each factory making ×3 the previous one made early factor
 - **Quad tap is capped at 2**, so the cat doesn't swamp the crew phase.
 - **The trade-off.** With smaller steps there's less to buy overall. The prices either made factories #4 and #5 a trap (20 / 15 / 9 min) or let everything be bought early (17 / 10 / 8 min). The user chose the second.
 - **Next:** more content, either more lines per factory or kitten levels as a repeatable purchase, to bring back even pacing.
+
+## 10. Next mechanics and goal spacing (research, 2026-10-12)
+
+### Goal spacing
+
+- **Shipped games keep a round, fixed reward step and let the time between milestones grow.**
+  - Egg, Inc. eggs are each worth ×5 the previous one, while the farm value needed to unlock the next grows ×45–700 per step ([wiki](https://egg-inc.fandom.com/wiki/Eggs?oldid=2165)).
+  - Cookie Clicker's kitten upgrades cost ×1000 per step ([wiki.gg](https://cookieclicker.wiki.gg/wiki/Milk)).
+  - Universal Paperclips gives frequent small wins (trust at Fibonacci steps, about ×1.6 apart) and only two big era changes.
+- **Pacing guides say:** early goals fast, later ones longer but finite. Tune by time-to-next rather than by price, and avoid stretches of 3 h or more without burst events.
+- **Long goals don't have to mean long waits.**
+  - A purchase with payback P that adds a fraction x of income costs P·x·income, so the wait to afford it is only P·x.
+  - Many small (x ≤ 20%) purchases with no cap therefore allow long goals (high P) with waits of 1–2 minutes.
+  - **Clicker's goals are short because there's too little to buy, not because 1M / 10M / 100M is wrong.**
+- **Recommendation: keep ×10 round numbers.** Lengthen goals 2–3 with content (kitten levels from 10M), and continue the ladder 1B → 10T. Possibly switch to ×100 goals after an "era" boundary.
+
+### Proposed ladder (default sim player)
+
+| Goal | Value | Target min | Cumulative | What carries it |
+| --- | --- | --- | --- | --- |
+| 1 | 1M | 17 | 17 | factories |
+| 2 | 10M | 12 | 29 | cat + cat training |
+| 3 | 100M | 12 | 41 | kitten crew + first promotions |
+| 4 | 1B | 14 | 55 | kitten levels, first underlings |
+| 5 | 10B | 15 | 70 | underlings, team synergy |
+| 6 | 100B | 17 | 87 | stamps (achievements) |
+| 7 | 1T | 19 | 106 | lead perks tier 2 |
+| 8 | 10T | 22 | 128 | era boundary |
+
+### Next mechanics, ranked
+
+1. **Kitten levels: XP from work + PROMOTE.**
+   - Working fills a kitten's XP bar (Night owl's counts while away).
+   - When it's full, PROMOTE costs points and gives +15% to its factory. Levels 5/10/15/20 are milestones (×2 and an unlock).
+   - No cap, no decay, and nothing lost on MOVE.
+   - Start at 10M.
+   - Patterns: Fallout Shelter XP from work, Idle Miner super managers, AdVenture Capitalist milestones.
+2. **Underlings.**
+   - Levels 5/10/15 open slots for up to 3 underlings per lead.
+   - Underlings are recruited from the save seed, cost points, have a small trait, add output and XP to their lead, and need nothing.
+   - Decisions: which lead gets a slot, which recruit to take, team set bonuses, moving whole teams.
+   - Lesson from Idle Miner's Super Manager 2.0: show progress from the first session; don't hide it behind scarce currency.
+3. **Perk picks at promotion milestones:** choose 1 of 2–3 (Foreman: underlings +30%; Mentor: team XP +50%; Courier: 10% of output to the cat), with free respec.
+4. **Golden yarn and stamps.**
+   - Golden yarn: an optional tappable yarn ball every 6–10 min of active play gives ×5 for 60 s. Missing it costs nothing.
+   - Stamps: achievements, each worth +2–4% permanently (Cookie Clicker milk).
+   - Both produce countable events for the friends league.
+
+### Friends league
+
+Raw "points this week" always favours whoever started earliest. Fairer scores:
+- orders of magnitude gained this week;
+- league points for events (goals, promotions, care days, yarn catches);
+- a weekly fresh-start event.

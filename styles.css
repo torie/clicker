@@ -527,3 +527,12 @@ button:focus-visible { outline: 2px dashed var(--amber); outline-offset: 3px; }
 .mgr-trait { color: var(--amber) !important; }
 .manager.happy { box-shadow: inset 0 0 18px rgba(255, 212, 121, .12); }
 #move-rows { margin-top: 4px; }
+
+/* A kitten-run factory: the manager card takes the collect button's place, so instead of a small
+   list scrolling inside the screen, the whole screen scrolls as one page and the list shows in full. */
+#screen-factory.crewed .shop.ext { flex: 0 0 auto; min-height: 0; }
+#screen-factory.crewed .shop.ext .list { flex: 0 0 auto; overflow: visible; }
+#screen-factory.crewed .manager { grid-template-columns: 44px minmax(0, 1fr); padding: 8px 10px; gap: 10px; }
+#screen-factory.crewed .mgr-art, #screen-factory.crewed .mgr-art svg { width: 44px; height: 44px; }
+#screen-factory.crewed .mgr-body { gap: 3px; }
+#screen-factory.crewed .manager .care { min-height: 32px; }

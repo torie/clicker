@@ -369,7 +369,7 @@ function renderManager() {
   set($('manager'), 'class', 'manager' + (G.happy(s) ? ' happy' : ''));
   set($('mgr-title'), 'text', k.name.toUpperCase() + ' RUNS THIS FACTORY');
   set($('mgr-boost'), 'text', fmtBoost(G.kittenBoost(s, k, ui.cur)));
-  set($('mgr-desc'), 'text', 'Everything ships to you automatically. Nothing to collect. ' + (k.fav === ui.cur ? 'This is its favourite factory.' : 'Its favourite is factory #' + (k.fav + 1) + '.'));
+  set($('mgr-desc'), 'text', 'Ships everything · nothing to collect · ' + (k.fav === ui.cur ? '♥ its favourite' : 'loves #' + (k.fav + 1)));
   set($('mgr-trait'), 'text', traitLine(k));
 }
 
@@ -379,6 +379,8 @@ function renderFactory() {
   const c = G.siloCap(f), full = f.store >= c, pct = Math.round(Math.min(1, f.store / c) * 100);
   const k = G.kittenAt(s, ui.cur), run = !!(k && f.kitOn); // run: a kitten is running the whole factory right now
   set($('fac-title'), 'text', 'FACTORY #' + (ui.cur + 1));
+  // With a kitten in charge the manager card takes room, so the whole screen scrolls as one page.
+  set($('screen-factory'), 'class', 'screen' + (k ? ' crewed' : ''));
   set($('fac-pts'), 'text', G.fmt(s.pts));
   slots.forEach(renderSlot);
 
@@ -415,13 +417,13 @@ function renderFactory() {
   set($('collect'), 'disabled', f.store < 1);
 
   set($('ext-note'), 'hidden', !k);
-  if (k) set($('ext-note'), 'text', k.name.toUpperCase() + ' USES YOUR UPGRADES TOO: MORE LINES AND TURBO PRESSES MAKE IT RUN EVEN FASTER, AND NOTHING STOPS WHEN THE SILO FILLS');
+  if (k) set($('ext-note'), 'text', 'MORE LINES AND TURBO PRESSES MAKE ' + k.name.toUpperCase() + ' RUN EVEN FASTER');
   G.EXTENSIONS.forEach((e, i) => {
     const locked = G.extensionLocked(s, e), maxed = G.extensionMaxed(f, e), cost = G.extensionCost(e, f);
     // Nothing is stored while a kitten ships it all, so the silo and dock don't help (except a Packer's dock).
     const moot = run && (e.id === 'silo' || (e.id === 'dock' && k.trait !== 'pack'));
     setRow(extRows[i], {
-      cls: (locked ? 'locked' : maxed ? 'maxed' : s.pts >= cost ? 'ok' : 'no') + flashCls(e.id),
+      cls: (locked ? 'locked' : maxed ? 'maxed' : s.pts >= cost && !moot ? 'ok' : 'no') + flashCls(e.id),
       disabled: locked || maxed,
       nm: '[' + f[e.id] + '/' + e.max + '] ' + (locked ? '████████ ???' : e.name),
       price: maxed ? 'MAX' : G.fmt(cost),

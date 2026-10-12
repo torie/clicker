@@ -67,7 +67,7 @@ Checks: `npm test` (31 tests, all passing), `node scripts/balance-sim.mjs [--tap
     - The move sheet is `#move`.
     - On the factory screen, the manager card shows the kitten, its boost, its trait and MOVE.
     - A one-time intro card (`#lesson`) appears when the crew arrives.
-  - **Play-testing:** on localhost, `#preset=precat` (just past 1M, with the cat ready to adopt) and `#preset=precrew` (9.5M) load saves from `test/presets/`, written by `balance-sim.mjs --save-at N --save-to FILE`.
+  - **Play-testing:** on localhost, `#preset=precat` (just past 1M, with the cat ready to adopt), `#preset=precrew` (9.5M) and `#preset=crew` (20M, five kittens at work) load saves from `test/presets/`, written by `balance-sim.mjs --save-at N --save-to FILE`.
 - **Planned next shift, at 100M (the user's direction, not built):** kittens **level up**. Levelled kittens **employ their own underlings** to speed up production and **look after those underlings themselves**, so the player manages the top layer of kittens while they manage theirs.
 - The user uses "levels" for these steps; the UI still says "GOAL n". Each level should end in a new stretch goal.
 - **Store** (`#screen-store`, opened from the amber bag icon in the header, next to the music button, so the goal meter stays visible). Items cost points; the first of each list is free and owned from the start. Tapping an item you don't own opens a **confirmation sheet** (`#confirm`: big preview, price, balance, ▶ preview for tracks, CANCEL / BUY). Nothing is bought without tapping BUY, and owned items switch with one tap:
