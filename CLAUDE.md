@@ -26,29 +26,48 @@ Phone-first incremental clicker game, shipped as a PWA on GitHub Pages. Plain HT
 | `scripts/balance-sim.mjs` | Greedy-player simulation against the real rules. Run it after any price or rate change. |
 | `scripts/make-icons.mjs` | Regenerates `icons/*.png` (pixel "+1" button). |
 
-Checks: `npm test` (27 tests, all passing), `node scripts/balance-sim.mjs [--taps N --collect S --care S]`, `npm start` then open http://localhost:8080 at phone size. `#reset` on the URL wipes the save.
+Checks: `npm test` (31 tests, all passing), `node scripts/balance-sim.mjs [--taps N --collect S --daily 0|1 --worth S --seed N --trace --save-at N --save-to FILE]`, `npm start` then open http://localhost:8080 at phone size. `#reset` on the URL wipes the save.
 
 ## Game design (decided with the user)
 
 - **Core loop:** tap the green button → points → buy upgrades → the number grows faster. The goal is simply the highest number.
-- **Upgrades:** Auto-clicker (+1/s, unlimited), Double tap (×2 per click, max 5), Quad tap (×4, max 3), Lucky clicks (+5% chance of ×10 per level, max 5). Each upgrade stays hidden until the player has earned half its base price.
+- **Upgrades:** Auto-clicker (+1/s, unlimited), Double tap (×2 per click, max 5), Quad tap (×4, max 2), Lucky clicks (+5% chance of ×10 per level, max 5), **Power tap** (each tap also earns 1% of the income per second per level, max 5; luck doesn't multiply it, and the cat's clicks don't get it), **Cat training** (after the cat). Each upgrade stays hidden until the player has earned half its base price.
 - **Click factories** (the user's idea; called "click factory", never "farm"):
-  - Up to **5**, costing 500 / 4K / 25K / 120K / 500K. Factory #n makes and stores ×3ⁿ⁻¹ of #1, and its extensions cost ×4ⁿ⁻¹.
+  - Up to **5**, costing 500 / 3.3K / 38K / 67K / 120K. Factory #n makes and stores ×1.6ⁿ⁻¹ of #1 (`TIER_OUT`; was ×3 until 2026-10-12), and its extensions cost ×1.9ⁿ⁻¹ (`TIER_COST`). The user wanted the gap smaller so early factories stay worth having: fully upgraded, the five make 6 / 10 / 16 / 26 / 41% of factory output (with ×3 it was 1% for #1 and 66% for #5).
   - Production goes into a **silo, not the balance**. The player must **enter the factory to collect**. When the silo is full, production stops and the UI flashes yellow.
   - The factory is drawn as a real building: saw-tooth roof, smoking chimney, stamping presses, conveyor belts carrying glowing clicks into a silo that visibly fills.
-  - **Extensions:** Assembly line (up to 4 lines), Turbo press (×2 speed, max 3), Bigger silo (×2, max 8), Loading dock (20% ships straight to the balance, max 3). **No kittens in factories before 10M**: the cat (clicking the button) is the only kitten in the factory phase.
+  - **Extensions:** Assembly line (up to 4 lines), Turbo press (×2 speed, max 5), Bigger silo (×2, max 10), Loading dock (20% ships straight to the balance, max 3). **No kittens in factories before 10M**: the cat (clicking the button) is the only kitten in the factory phase.
   - A slot bar in the factory switches between factories, shows each silo's fill, and builds the next one.
 - **Stretch goals:** a meter on the main screen shows progress, points to go, an ETA and the reward.
-  - **Goal 1: 1,000,000 points, tuned for about 30 minutes of active play.** Buying it adopts a **cute pixel cat that clicks the button 50×/s** (50 × points per click). A boot-style "CAT ADOPTED" sequence plays.
+  - **Goal 1: 1,000,000 points, about 17 minutes of active play.** Buying it adopts a **cute pixel cat that clicks the button 12×/s** (`CAT_CPS`; was 50×/s before economy v2). **Cat training** (repeatable, from 350K, ×2.6 per level) adds 12 clicks/s per level, so the cat grows through goal 2 instead of jumping income ×28. A boot-style "CAT ADOPTED" sequence plays.
   - **Goal 2: 10,000,000.** Reaching it (no purchase needed) permanently opens the **Store**, with a "STORE OPEN" boot sequence, and moves the meter on to goal 3. The store is **cosmetic only**.
   - **Goal 3: 100,000,000.** Reward teased as "LEVEL UP YOUR KITTENS" (not built yet; see next steps). Reaching it shows "100,000,000 REACHED · NEXT CYCLE · SOON". The 10M → 100M stretch is the **kitten crew tutorial** (below), which prepares the player for that shift.
-- **Kitten crew** (from goal 2; the user's direction: the game shifts from managing factories to managing kittens, and 10M → 100M teaches kitten care):
-  - At 10M the first kitten (Mochi) joins **free** and runs the strongest factory. The player **hires one kitten per factory** (500K / 1M / 2M / 4M / 8M by factory) on the crew screen.
-  - A **working** kitten **runs its factory**: ×6 speed (`KITTEN_BOOST`), production ships straight to the balance, and the silo empties (`CREW_DRAIN`). So the player stops collecting and looks after kittens instead. The user wanted this to take **less management than the factories** did: the simulation measures ~3.3 actions/min in the crew phase vs ~12/min of collecting before it.
-  - **Needs drain while working** and arrive one lesson at a time, by best balance: **food** at 10M (feed, 50K; lasts 4 min of work), **sleep** at 25M (nap for 40 s, off work; lasts 6 min), **play** at 50M (catch the yarn ball 5 times; lasts 5 min). Each lesson shows a card (`#lesson`), and the crew screen keeps the current lesson and the next one on top.
-  - A kitten with an empty need **stops working** (its factory is back to normal speed and filling its silo), and **every unhappy kitten pulls the cat away from the button**: the cat's clicking × `catFocus` (average kitten mood: 0 if it needs care, 0.5 while napping, 0.1–1 by its lowest need otherwise). Shown as "CAT n%" under the cat.
-  - UI: paw button in the header (badge = kittens needing care), an alert strip under the goal meter ("MOCHI IS HUNGRY · THE CAT IS HELPING"), and the crew screen (`#screen-crew`): lesson card, cat focus bar, FEED ALL, a card per kitten with need bars and FEED / NAP / PLAY, and hire rows. Factory rows say "RUN BY MOCHI · ×6". On the factory screen a kitten-run factory is unmistakable: the hall gets an amber "RUN BY MOCHI · ×6" tag, the silo becomes an "AUTO / SHIP" chute, the belts speed up, and a **manager card** (big kitten, "MOCHI RUNS THIS FACTORY", "Nothing to collect", need bars, FEED / NAP / PLAY) replaces the Collect button. When the kitten needs care or naps, the card turns yellow or dashed and Collect comes back. A factory with no kitten shows a hire offer there. Upgrades stay buyable; the silo and loading dock are marked as only helping while the kitten is off duty.
-  - Time away drains the crew as well (offline progress runs in 5 s steps), so returning after hours means hungry kittens and a distracted cat.
+- **Kitten crew v2** (from goal 2; rebuilt 2026-10-11 after the user found the hunger/nap/play upkeep tedious):
+  - **Hiring.** At 10M the first kitten joins **free** and runs the strongest factory. The player **hires one kitten per factory** (450K / 900K / 1.8M / 3.6M / 7.2M by factory). The next recruit (name, trait, favourite) is shown before hiring, and each hire row previews its boost and the income it would ship.
+  - **What a kitten does.** It **runs its factory**: production ships straight to the balance, the silo empties (`CREW_DRAIN`), and nothing stalls on a full silo. On top of that it runs ×1.7 (`KITTEN_BOOST`).
+  - **Favourite factory:** ×1.5 (`FAV_BONUS`).
+  - **One trait per kitten** (`TRAITS`):
+    - Hard worker: ×1.3.
+    - Gearhead: +15% per turbo press.
+    - Packer: +20% per loading dock, which makes the dock useful again.
+    - Cheerleader: other kittens +15%.
+    - Cat's pal: the cat clicks +25% faster.
+    - Night owl: ×2 while away.
+  - **MOVE** swaps kittens between factories for free. The move sheet previews each factory's boost and the change in shipped income.
+  - **Kittens are rolled from the save's `seed`/`rolls`,** so a save always offers the same recruits. Old kittens get a trait and favourite derived from their name.
+  - **Nothing drains and nothing is taken away.** The cat is never distracted. Hunger, naps, lessons and "cat focus" are gone.
+  - **Care time,** the user's "bonus task once per day":
+    - Once per local calendar day, FEED, NAP and PLAY (the yarn game), in any order.
+    - All three make the crew happy: every kitten-run factory runs ×2 (`HAPPY_MULT`) for an hour (`HAPPY_SECONDS`, counts down while away too).
+    - Skipping it costs nothing.
+  - **UI:**
+    - The paw button in the header shows "!" when care time is ready.
+    - An amber strip under the goal meter reads "CARE TIME IS READY", "HAPPY CREW · 43m LEFT" or "CREW OK".
+    - The crew screen (`#screen-crew`) has the care card, a card per kitten (trait, favourite, boost, MOVE), the next recruit and the hire rows.
+    - The move sheet is `#move`.
+    - On the factory screen, the manager card shows the kitten, its boost, its trait and MOVE.
+    - A one-time intro card (`#lesson`) appears when the crew arrives.
+  - **Play-testing:** on localhost, `#preset=precat` (just past 1M, with the cat ready to adopt) and `#preset=precrew` (9.5M) load saves from `test/presets/`, written by `balance-sim.mjs --save-at N --save-to FILE`.
 - **Planned next shift, at 100M (the user's direction, not built):** kittens **level up**. Levelled kittens **employ their own underlings** to speed up production and **look after those underlings themselves**, so the player manages the top layer of kittens while they manage theirs.
 - The user uses "levels" for these steps; the UI still says "GOAL n". Each level should end in a new stretch goal.
 - **Store** (`#screen-store`, opened from the amber bag icon in the header, next to the music button, so the goal meter stays visible). Items cost points; the first of each list is free and owned from the start. Tapping an item you don't own opens a **confirmation sheet** (`#confirm`: big preview, price, balance, ▶ preview for tracks, CANCEL / BUY). Nothing is bought without tapping BUY, and owned items switch with one tap:
@@ -57,7 +76,56 @@ Checks: `npm test` (27 tests, all passing), `node scripts/balance-sim.mjs [--tap
 - **Saving:** localStorage (`clicker.save.v1`) every 5 s and when the app is hidden. Offline progress is capped at 8 h and reported in a "WELCOME BACK" toast.
 - **Music:** off by default. The note button in the header toggles it, and the preference is remembered (`clicker.music`) and resumed on the first tap, since browsers block autoplay.
 
+### Progression rework (decided 2026-10-11)
+
+The user found the balance uneven, the late game too automatic, and kitten care tedious. The research, the measurements and the proposal are in [docs/progression-research.md](docs/progression-research.md). The user's decisions:
+
+- **No prestige reset at 100M.** The game carries on, with kitten levels and underlings.
+- **Kitten needs become a once-a-day bonus task** that gives a temporary speed bonus. Neglect costs nothing.
+- **Multiplayer will be a friends-only competition with a small backend**, but it waits until the mechanics feel right.
+
+The plan, in order:
+
+1. Economy v2 (section 6 of the doc).
+2. Crew rework: assignment and traits instead of draining needs, plus the daily task.
+3. Goals beyond 100M.
+4. The friends league.
+
 ### Balance (from `scripts/balance-sim.mjs`)
+
+The sim was improved on 2026-10-11:
+
+- It buys speed-ups together with the silo they need, and new factories together with their lines.
+- It buys anything that pays off within 5 min.
+- It prints, per goal, the longest wait between purchases and each income source's share. `--trace` lists every purchase.
+
+**Current balance (2026-10-12).** This is economy v2 plus crew v2 plus the smaller ×1.6 gap between factories. The prices came from a random search over the sim (the search script is not kept).
+
+| Player | Goal times | Longest wait |
+| --- | --- | --- |
+| Default (5 taps/s, collect every 20 s, does care time) | 17.3 / 9.8 / 7.8 min | 4.6 min |
+| Skips care time | goal 3: 13.5 min | 8.7 min |
+| Slow (3 taps/s, collect every 40 s) | 20.7 / 13.0 / 8.3 min | 5.1 min |
+| Very slow (2 taps/s, collect every 60 s) | 24 / 15 / 8 min | 5.3 min |
+
+- Each goal's income is led by its own mechanic: factories 90% in goal 1, the cat 49% in goal 2, factories run by kittens 70% in goal 3.
+- All five factories are built before the cat.
+- The crew phase needs about 2 actions/min, against 15/min of collecting in goal 2.
+
+**The user chose this ("B") over even pacing.** The alternative kept goals at 20 / 15 / 9 min, but factories #4 and #5 never paid off. With the smaller gap there's simply less to buy. The fix is more content, not prices:
+
+- more assembly lines per factory, which would mean redrawing the hall;
+- kitten levels as a repeatable purchase.
+
+The rules before v2 gave 25.3 / 12.9 / 17.8 min, waits of up to 7.3 min, and the cat at 76% of goal 2.
+
+Known weak spots:
+
+- Goals get shorter as the game goes on (17 → 10 → 8 min), because the game runs out of things to buy.
+- The prices are sensitive. Rounding Quad tap's growth from 39 to 40 once gave the slow player a 9 min wait, so rerun the sim with several play styles after any change.
+
+The figures below come from the old sim and the old rules.
+
 
 - A player tapping 5/s, collecting every 20 s and checking the crew every 20 s: 0 → 1M **30.7 min**, 1M → 10M **14.1 min**, 10M → 100M **16.6 min**. The user asked for the 100M stretch to take slightly longer than the one before, while feeling like a speedup (income jumps with the ×6 kittens), and to need less management. Checking the crew only once a minute: 16.9 min; never caring: ~35 min (and back to collecting); a slower player (3 taps/s, collect every 40 s, crew every 40 s): ~19 min.
 - Removing kittens from the factory phase didn't change 1M → 10M (the cat dominates there), so nothing else needed retuning.
@@ -80,18 +148,19 @@ Design references (private claude.ai artifacts owned by the user):
 - Design canvas: https://claude.ai/artifact/KaGwSBeGGnrKYEznZBP1Nh. The artboard `Factory-Phone.dc.html` is the full interactive prototype the app was built from.
 - Soundtrack player: https://claude.ai/artifact/DmSxWWSJTXjNGcWbU5oLER
 
-## Status (2026-09-28)
+## Status (2026-10-12)
 
-- `18351bd` (the game, PWA, tests, README) is pushed to `origin/main`.
-- Committed on `main` (not pushed): this file, `scripts/balance-sim.mjs`, the 10M Store (skins, jukebox with three new songs, purchase confirmation, goal 3 at 100M), the kitten crew with one hired kitten per factory, and the main-screen layout fix (number and button size to the space left, via container units). `sw.js` cache `clicker-v11` (with the update banner).
-- Tested in a desktop browser at phone size: fresh game, late-game save, factory, collecting, cat, welcome-back toast, store unlock, buying and wearing a skin, previewing and buying a track, crew start with the free kitten and food lesson, hiring, hungry alert and badge, feeding, sleep lesson and napping, play lesson and the yarn game, factory rows run by the crew. Audio has never been listened to by an agent, only checked for errors. **Not yet tested on a real phone** or as an installed PWA.
+- Deployed to https://torie.github.io/clicker/ (`sw.js` cache `clicker-v12`): economy v2, kitten crew v2 with care time, and the ×1.6 factory tiers. The user is play-testing it over a longer period.
+- Tested in a desktop browser at phone size: the new upgrades, the cat, store unlock, crew intro, hiring, care time with the yarn game, moving kittens, and the factory manager card. **Not yet tested on a real phone** or as an installed PWA.
+- Seen once while an agent drove the page: the crew intro card closed on its own about a second after appearing. Not reproduced.
 
 ## Suggested next steps
 
-1. The user pushes, enables Pages, and tests on a real phone: tap feel, safe areas, install, offline, audio on iOS.
-2. Decide the cat balance (see the open question above) and design what changes in the game after 10M ("cycle 2").
-3. Play-test the kitten crew tutorial (pace, lesson clarity, whether care feels lighter than collecting), then build the **100M shift: kitten levels and underlings** (see above). Open design questions for the user: how a kitten levels up (XP from work, or bought?), how many underlings, what underlings need, and what the player still does at that point.
-4. Ideas raised but not built:
+1. Collect the user's play-test feedback from the deployed build (pacing per goal, cat, crew assignment, care time, phone feel, install, offline, audio on iOS).
+2. Add content for even pacing: more lines per factory, and/or kitten levels as a repeatable purchase (see the Balance notes).
+3. Build the **100M shift: kitten levels and underlings** (see above). Open design questions for the user: how a kitten levels up (XP from work, or bought?), how many underlings, what underlings need, and what the player still does at that point.
+4. The friends league (multiplayer), once the mechanics feel right.
+5. Ideas raised but not built:
    - a short tune when the cat is adopted
    - a "collect all" shortcut
    - a settings or reset screen (today only `#reset` exists)

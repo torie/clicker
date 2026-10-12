@@ -1,39 +1,86 @@
 // Simulates a greedy player against the real rules in src/game.js, to tune prices.
-// Run: node scripts/balance-sim.mjs [--taps 5] [--collect 20]
+// Run: node scripts/balance-sim.mjs [--taps 5] [--collect 20] [--daily 1] [--worth 300] [--seed 1] [--trace]
+//   [--save-at 950000 --save-to test/presets/precat.json]  (--trace lists every purchase; --save-at writes the
+//   save the first time the balance reaches that many points, for play-testing from that point)
 //
 // The player taps `taps` times per second, empties every silo every `collect` seconds,
 // and always buys whatever pays for itself fastest (price ÷ extra income), unless
-// saving for the current goal would be quicker. After 10M they check on the kitten crew every
-// `care` seconds and feed, nap or play with any kitten whose need is below LOW_NEED (or empty).
+// saving for the current goal would be quicker and it takes longer than `worth` seconds to pay off. From 10M they keep every kitten in
+// the factory where it does the most, hire a kitten as soon as they can afford one, and (unless
+// --daily 0) do care time as soon as the crew arrives.
+import { writeFileSync } from 'node:fs';
 import * as G from '../src/game.js';
 
 const arg = (name, d) => {
   const i = process.argv.indexOf('--' + name);
   return i > 0 ? Number(process.argv[i + 1]) : d;
 };
-const TAPS = arg('taps', 5), COLLECT = arg('collect', 20), CARE = arg('care', 20), LIMIT = 4 * 3600;
+const TRACE = process.argv.includes('--trace');
+// Like a real player, buys anything that pays for itself within WORTH seconds even when saving for the goal would be quicker.
+const WORTH = arg('worth', 300);
+const TAPS = arg('taps', 5), COLLECT = arg('collect', 20), DAILY = arg('daily', 1), LIMIT = 4 * 3600;
+const SAVE_AT = arg('save-at', 0), SAVE_TO = process.argv[process.argv.indexOf('--save-to') + 1];
+
+// What tapping earns per second on average, lucky clicks included.
+const tapIncome = (s) => TAPS * (G.perClick(s) * (1 + (G.LUCK_MULT - 1) * G.LUCK_CHANCE * s.own.luck) + G.powerGain(s));
 
 // Income the player actually gets per second, counting silos that fill before collection.
 function effectiveIncome(s) {
-  const tapping = TAPS * G.perClick(s) * (1 + (G.LUCK_MULT - 1) * G.LUCK_CHANCE * s.own.luck);
+  const tapping = tapIncome(s);
   G.syncCrew(s);
   const factories = s.facs.reduce((a, f) => a + (f.kitOn ? G.factoryRate(f) : Math.min(G.factoryRate(f), G.siloCap(f) / COLLECT)), 0);
   return tapping + G.perSec(s) + factories;
 }
 
+// Where the income comes from, e.g. "12K/s (tap 20%, cat 50%, factories 30%)".
+function shares(s) {
+  G.syncCrew(s);
+  const src = {
+    tap: tapIncome(s) + s.own.auto,
+    cat: G.catRate(s),
+    factories: s.facs.reduce((a, f) => a + (f.kitOn ? G.factoryRate(f) : Math.min(G.factoryRate(f), G.siloCap(f) / COLLECT)), 0)
+  };
+  const tot = src.tap + src.cat + src.factories;
+  return `${G.fmt(tot)}/s (` + Object.entries(src).map(([k, v]) => `${k} ${Math.round(100 * v / tot)}%`).join(', ') + ')';
+}
+
+// An option is a list of purchases made together; its cost is measured on a copy of the state.
+const BIG = 1e15;
+function bundle(s, name, steps) {
+  const t = structuredClone(s);
+  t.pts = BIG;
+  if (!steps.every((f) => f(t))) return null;
+  return { name, cost: BIG - t.pts, buy: (u) => steps.every((f) => f(u)) };
+}
+// A faster factory is worthless while its silo fills between collections, and so is a bigger silo on
+// its own. Like a player who sees the silo flash full, the speed-ups also come with the silo they need.
+const topUpSilo = (i) => (t) => {
+  const f = t.facs[i], silo = G.EXTENSIONS.find((e) => e.id === 'silo');
+  while (!G.extensionMaxed(f, silo) && G.siloCap(f) / COLLECT < G.factoryRate(f) && G.buyExtension(t, i, 'silo'));
+  return true;
+};
+const ext = (i, id) => (t) => G.buyExtension(t, i, id);
+
 function options(s) {
   const o = [];
   for (const u of G.UPGRADES) {
-    if (!G.upgradeHidden(s, u) && !G.upgradeMaxed(s, u)) o.push({ name: u.id, cost: G.upgradeCost(s, u), buy: (t) => G.buyUpgrade(t, u.id) });
+    if (!G.upgradeHidden(s, u) && !G.upgradeMaxed(s, u)) o.push(bundle(s, u.id, [(t) => G.buyUpgrade(t, u.id)]));
   }
-  if (s.facs.length < G.MAX_FACTORIES) o.push({ name: 'factory', cost: G.nextFactoryCost(s), buy: (t) => G.buildFactory(t) >= 0 });
-  if (G.crewOn(s)) s.facs.forEach((f, i) => { if (!G.kittenAt(s, i)) o.push({ name: 'hire#' + (i + 1), cost: G.hireCost(i), buy: (t) => G.hireKitten(t, i) }); });
+  if (s.facs.length < G.MAX_FACTORIES) {
+    const i = s.facs.length, lines = G.EXTENSIONS.find((e) => e.id === 'lines');
+    o.push(bundle(s, 'factory', [(t) => G.buildFactory(t) >= 0]));
+    // A new factory is built to be filled with lines, so also offer it fully lined.
+    o.push(bundle(s, 'factory+lines', [(t) => G.buildFactory(t) >= 0, ...Array.from({ length: lines.max - lines.min }, () => ext(i, 'lines')), topUpSilo(i)]));
+  }
+  if (G.crewOn(s)) s.facs.forEach((f, i) => { if (!G.kittenAt(s, i)) o.push(bundle(s, 'hire#' + (i + 1), [(t) => G.hireKitten(t, i)])); });
   s.facs.forEach((f, i) => {
     for (const e of G.EXTENSIONS) {
-      if (!G.extensionLocked(s, e) && !G.extensionMaxed(f, e)) o.push({ name: e.id + '#' + (i + 1), cost: G.extensionCost(e, f), buy: (t) => G.buyExtension(t, i, e.id) });
+      if (G.extensionLocked(s, e) || G.extensionMaxed(f, e)) continue;
+      o.push(bundle(s, e.id + '#' + (i + 1), [ext(i, e.id)]));
+      if (e.id === 'lines' || e.id === 'turbo') o.push(bundle(s, e.id + '#' + (i + 1) + '+silo', [ext(i, e.id), topUpSilo(i)]));
     }
   });
-  return o;
+  return o.filter(Boolean);
 }
 
 function bestBuy(s) {
@@ -49,42 +96,82 @@ function bestBuy(s) {
   return best;
 }
 
-const s = G.newGame(), log = [], stats = { feeds: 0, naps: 0, plays: 0, focus: 0, focusN: 0 };
+// Puts every kitten where it does the most (trying every arrangement; there are at most 5 kittens).
+// Returns how many kittens moved.
+function arrange(s) {
+  if (s.crew.length < 2) return 0;
+  const before = s.crew.map((k) => k.fac), facs = s.facs.map((f, i) => i);
+  let best = null, bestInc = -1;
+  const place = (n, used) => {
+    if (n === s.crew.length) {
+      G.syncCrew(s);
+      const inc = effectiveIncome(s);
+      if (inc > bestInc) { bestInc = inc; best = s.crew.map((k) => k.fac); }
+      return;
+    }
+    for (const i of facs) if (!used.has(i)) { s.crew[n].fac = i; used.add(i); place(n + 1, used); used.delete(i); }
+  };
+  place(0, new Set());
+  s.crew.forEach((k, n) => { k.fac = best[n]; });
+  G.syncCrew(s);
+  return best.filter((f, n) => f !== before[n]).length;
+}
+
+const s = G.newGame(), log = [], stats = { moves: 0, cares: 0 };
+s.seed = arg('seed', 1);
 // Management effort per goal: collecting a silo or caring for a kitten each count as one action.
-const phases = G.GOALS.map(() => ({ actions: 0 }));
+const phases = G.GOALS.map(() => ({ actions: 0, gap: 0 }));
 let goalNow = 0;
 const phase = () => phases[goalNow];
-let t = 0, lastBuy = 0;
+let t = 0, lastBuy = 0, SAVE_DONE = false;
 for (const [gi, goal] of G.GOALS.entries()) {
   const start = t;
   goalNow = gi;
+  lastBuy = t; // reaching a goal counts as an event: the wait is measured within each goal
   while (s.pts < goal.at && t < LIMIT) {
-    for (let b = bestBuy(s); b && s.pts >= b.cost && (goal.at - s.pts) / effectiveIncome(s) > b.payback; b = bestBuy(s)) {
-      b.buy(s);
-      lastBuy = t;
+    // Kittens end the collecting, which the income maths doesn't value, so the player hires one as
+    // soon as they can afford it (cheapest factory first).
+    for (let i = 0; i < s.facs.length && G.crewOn(s); i++) {
+      if (G.kittenAt(s, i) || s.pts < G.hireCost(i) || !G.hireKitten(s, i)) continue;
+      if (TRACE) console.log(`${(t / 60).toFixed(1).padStart(5)} min  hire#${i + 1}   ${G.fmt(G.hireCost(i)).padStart(7)}  (no more collecting)`);
+      const moved = arrange(s);
+      stats.moves += moved;
+      phase().actions += moved;
     }
-    const tapping = TAPS * G.perClick(s) * (1 + (G.LUCK_MULT - 1) * G.LUCK_CHANCE * s.own.luck);
+    for (let b = bestBuy(s); b && s.pts >= b.cost && Math.max(WORTH, (goal.at - s.pts) / effectiveIncome(s)) > b.payback; b = bestBuy(s)) {
+      if (TRACE) console.log(`${(t / 60).toFixed(1).padStart(5)} min  ${b.name.padEnd(9)} ${G.fmt(b.cost).padStart(7)}  payback ${Math.round(b.payback)}s`);
+      b.buy(s);
+      phase().gap = Math.max(phase().gap, t - lastBuy);
+      lastBuy = t;
+      const moved = arrange(s);
+      stats.moves += moved;
+      phase().actions += moved;
+    }
+    const tapping = tapIncome(s);
     G.earn(s, tapping);
     G.step(s, 1);
     t++;
     if (t % COLLECT === 0) s.facs.forEach((f, i) => { if (!f.kitOn && G.collect(s, i) > 0) phase().actions++; });
-    G.checkLessons(s);
-    if (G.crewOn(s) && t % CARE === 0) {
-      s.crew.forEach((k, i) => {
-        if (G.napping(k)) return;
-        if (s.lessons >= 2 && k.sleep < G.LOW_NEED) { G.napKitten(s, i); stats.naps++; phase().actions++; return; }
-        if (k.food < G.LOW_NEED && G.feedKitten(s, i)) { stats.feeds++; phase().actions++; }
-        if (s.lessons >= 3 && k.fun < G.LOW_NEED && G.playKitten(s, i)) { stats.plays++; phase().actions++; }
-      });
+    if (DAILY && G.careReady(s, 'day 1')) {
+      for (const c of G.CARE_STEPS) G.doCare(s, 'day 1', c);
+      stats.cares++;
+      phase().actions += G.CARE_STEPS.length;
     }
-    if (G.crewOn(s)) { stats.focus += G.catFocus(s); stats.focusN++; }
+    if (SAVE_AT && SAVE_TO && !SAVE_DONE && s.pts >= SAVE_AT) {
+      writeFileSync(SAVE_TO, JSON.stringify(G.serialize(s)) + '\n');
+      console.log(`saved the game at ${(t / 60).toFixed(1)} min (${G.fmt(s.pts)} points) to ${SAVE_TO}`);
+      SAVE_DONE = true;
+    }
   }
-  const mins = (t - start) / 60;
-  log.push(`goal ${gi + 1} (${G.fmt(goal.at)}): ${mins.toFixed(1)} min, last purchase at ${(lastBuy / 60).toFixed(1)} min, ${(phases[gi].actions / mins).toFixed(1)} management actions/min`);
+  const mins = (t - start) / 60, p = phases[gi];
+  p.gap = Math.max(p.gap, t - lastBuy); // the wait after the last purchase counts too
+  log.push(`goal ${gi + 1} (${G.fmt(goal.at)}): ${mins.toFixed(1)} min, longest wait between purchases ${(p.gap / 60).toFixed(1)} min, ` +
+    `${(p.actions / mins).toFixed(1)} management actions/min, income at the end ${shares(s)}, ${s.facs.length} factories`);
   if (gi === 0) G.adoptCat(s);
   if (gi === 1) G.checkStoreUnlock(s);
 }
-console.log(`taps ${TAPS}/s, collect every ${COLLECT}s, crew care every ${CARE}s`);
+console.log(`taps ${TAPS}/s, collect every ${COLLECT}s, ${DAILY ? 'does' : 'skips'} care time`);
 console.log(log.join('\n'));
-console.log(`crew after 10M: ${s.crew.length} kittens (${s.crew.map((k) => '#' + (k.fac + 1)).join(' ')}), ${stats.feeds} feeds, ${stats.naps} naps, ${stats.plays} plays, cat focus ${(100 * stats.focus / (stats.focusN || 1)).toFixed(0)}% on average`);
+console.log(`crew after 10M: ${s.crew.map((k) => `${k.name} (${k.trait}, loves #${k.fav + 1}) at #${k.fac + 1} ×${G.kittenBoost(s, k, k.fac).toFixed(1)}`).join(', ')}; ` +
+  `${stats.moves} moves, care time ${stats.cares}×`);
 console.log('final:', JSON.stringify({ own: s.own, facs: s.facs.map(({ lines, turbo, silo, kit }) => [lines, turbo, silo, kit].join('')) }));

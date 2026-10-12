@@ -505,3 +505,25 @@ button:focus-visible { outline: 2px dashed var(--amber); outline-offset: 3px; }
   .row.fbtn.full, .slot.full, .collect.full, .silo.full .tube { animation: none; }
   .pop { animation-duration: .01s; }
 }
+
+/* Crew v2: care time, recruits, traits. Amber is for kitten things; nothing here is an alarm. */
+.crew-alert.ready { border-color: var(--amber); background: #1C1608; color: var(--amber); animation: none; }
+.care.todo { background: var(--amber); border-color: var(--amber); color: #1A1300; }
+.care-card .line { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.care-card .vt { font-size: 22px; line-height: 1; color: var(--amber); }
+.care-card.rested { border-color: var(--rule-2); background: transparent; }
+.care-card.rested .nm, .care-card.rested .sect { color: var(--dim); }
+.care-card.happy { box-shadow: inset 0 0 18px rgba(255, 212, 121, .12); }
+.crew-note { margin: 0; color: var(--dim); line-height: 1.5; }
+.kitten .trait { color: var(--text); line-height: 1.4; }
+.kitten.happy .art { filter: drop-shadow(0 0 6px rgba(255, 212, 121, .6)); }
+.recruit { display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 12px; align-items: center; padding: 10px 12px; border: 1px dashed var(--amber); }
+.recruit .art svg { width: 52px; height: 52px; display: block; }
+.recruit .body { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.recruit .top-line { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.recruit .kname { font-size: 15px; font-weight: 600; color: var(--bright); }
+.recruit .status { font-size: 11px; letter-spacing: .1em; color: var(--amber); white-space: nowrap; }
+.recruit .job { font-size: 11px; color: var(--text); letter-spacing: .04em; line-height: 1.4; }
+.mgr-trait { color: var(--amber) !important; }
+.manager.happy { box-shadow: inset 0 0 18px rgba(255, 212, 121, .12); }
+#move-rows { margin-top: 4px; }

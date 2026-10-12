@@ -41,32 +41,43 @@ test('factories fill their silo and stop when full', () => {
   const s = rich(1000);
   assert.equal(G.buildFactory(s), 0);
   const f = s.facs[0];
-  assert.equal(G.factoryRate(f), 7);
+  assert.equal(G.factoryRate(f), G.LINE_RATE);
   G.step(s, 10);
-  assert.equal(f.store, 70);
+  assert.equal(f.store, G.LINE_RATE * 10);
   G.step(s, 1000);
   assert.equal(f.store, G.siloCap(f));
-  assert.equal(G.collect(s, 0), 400);
+  assert.equal(G.collect(s, 0), G.SILO_BASE);
   assert.equal(f.store, 0);
 });
 
-test('later factories are 3× stronger, and at most five can be built', () => {
+test('later factories are TIER_OUT× stronger, and at most five can be built', () => {
   const s = rich(1e9);
   for (let i = 0; i < 5; i++) assert.equal(G.buildFactory(s), i);
   assert.equal(G.buildFactory(s), -1);
-  assert.equal(G.factoryRate(s.facs[2]), 7 * 9);
-  assert.equal(G.siloCap(s.facs[2]), 400 * 9);
+  const t2 = G.TIER_OUT * G.TIER_OUT;
+  assert.ok(Math.abs(G.factoryRate(s.facs[2]) - G.LINE_RATE * t2) < 1e-9);
+  assert.ok(Math.abs(G.siloCap(s.facs[2]) - G.SILO_BASE * t2) < 1e-9);
+});
+
+test('fully upgraded, the first factory still makes a real share of all factory output', () => {
+  const s = rich(1e9);
+  for (let i = 0; i < 5; i++) G.buildFactory(s);
+  for (const f of s.facs) { f.lines = 4; f.turbo = G.EXTENSIONS.find((e) => e.id === 'turbo').max; }
+  const rates = s.facs.map(G.factoryRate), total = rates.reduce((a, b) => a + b);
+  assert.ok(rates[0] / total > 0.05, 'factory #1 is more than 5%');
+  assert.ok(rates[4] / total < 0.5, 'factory #5 is less than half');
 });
 
 test('loading dock ships part of production straight to the balance', () => {
   const s = rich(0);
   s.facs.push(Object.assign(G.newFactory(0), { dock: 1 }));
   G.step(s, 10);
-  assert.ok(Math.abs(s.pts - 14) < 1e-9);
-  assert.ok(Math.abs(s.facs[0].store - 56) < 1e-9);
+  const made = G.LINE_RATE * 10;
+  assert.ok(Math.abs(s.pts - made * G.DOCK_SHARE) < 1e-9);
+  assert.ok(Math.abs(s.facs[0].store - made * (1 - G.DOCK_SHARE)) < 1e-9);
 });
 
-test('adopting the cat costs 1M, unlocks goal 2 and clicks 50× per second', () => {
+test('adopting the cat costs 1M, unlocks goal 2 and clicks CAT_CPS× per second', () => {
   const s = rich(999999);
   assert.equal(G.adoptCat(s), false);
   s.pts = 1e6;
@@ -74,7 +85,29 @@ test('adopting the cat costs 1M, unlocks goal 2 and clicks 50× per second', () 
   assert.equal(s.pts, 0);
   assert.equal(G.currentGoal(s).at, 1e7);
   s.own.x2 = 1;
-  assert.equal(G.perSec(s), 100);
+  assert.equal(G.perSec(s), G.CAT_CPS * 2);
+});
+
+test('Cat training stays hidden until the cat is adopted, then adds CAT_TRAIN clicks per level', () => {
+  const s = rich(1e9);
+  assert.equal(G.buyUpgrade(s, 'train'), false, 'no cat yet');
+  s.cat = true;
+  assert.equal(G.buyUpgrade(s, 'train'), true);
+  assert.equal(G.buyUpgrade(s, 'train'), true, 'no max level');
+  assert.equal(G.catClicks(s), G.CAT_CPS + 2 * G.CAT_TRAIN);
+});
+
+test('Power tap adds a share of the income per second to every tap, which luck does not multiply', () => {
+  const s = G.newGame();
+  s.own.auto = 1000;
+  s.own.power = 2;
+  s.own.luck = 1;
+  const power = 2 * G.POWER_SHARE * 1000;
+  assert.equal(G.tapGain(s), 1 + power);
+  assert.deepEqual(G.tap(s, () => 0.99), { gain: 1 + power, lucky: false });
+  assert.deepEqual(G.tap(s, () => 0.01), { gain: G.LUCK_MULT + power, lucky: true });
+  s.cat = true;
+  assert.equal(G.catRate(s), G.CAT_CPS, 'the cat clicks plain clicks');
 });
 
 test('offline progress is capped at 8 hours', () => {
@@ -145,113 +178,142 @@ test('goal 3 is 100,000,000 and is the last goal for now', () => {
 });
 
 // A player who has just reached 10M, with the cat and `n` factories.
-function crewGame(n = 1) {
-  const s = Object.assign(rich(1e7), { cat: true, goalIdx: 1 });
+function crewGame(n = 1, seed = 1) {
+  const s = Object.assign(rich(1e7), { cat: true, goalIdx: 1, seed });
   for (let i = 0; i < n; i++) s.facs.push(G.newFactory(i));
   assert.equal(G.checkStoreUnlock(s), true);
   return s;
 }
+const DAY = '2026-10-11';
 
 test('before 10M there are no kittens in the factories: the extension list has no kitten crew', () => {
   assert.equal(G.EXTENSIONS.some((e) => e.id === 'kit'), false);
   assert.equal(G.crewOn(rich(1e9)), false);
 });
 
-test('at 10M the first kitten joins free, runs the strongest factory, and the first lesson is food', () => {
+test('at 10M the first kitten joins free and runs the strongest factory; the next recruit waits', () => {
   const s = crewGame(3);
   assert.equal(s.crew.length, 1);
-  assert.equal(s.crew[0].name, 'Mochi');
   assert.equal(s.crew[0].fac, 2);
-  assert.deepEqual(G.activeNeeds(s).map((n) => n.id), ['food']);
+  assert.ok(G.TRAITS.some((t) => t.id === s.crew[0].trait));
+  assert.ok(s.crew[0].fav >= 0 && s.crew[0].fav < G.MAX_FACTORIES);
+  assert.ok(s.recruit && s.recruit.name !== s.crew[0].name);
+  assert.equal(s.pts, 1e7, 'free');
 });
 
-test('hiring: one kitten per factory, priced by factory', () => {
+test('kittens are rolled from the save seed, so the same save always offers the same recruits', () => {
+  assert.deepEqual(crewGame(3, 42).crew, crewGame(3, 42).crew);
+  assert.deepEqual(crewGame(3, 42).recruit, crewGame(3, 42).recruit);
+});
+
+test('hiring: the waiting recruit joins, one kitten per factory, priced by factory', () => {
   const s = crewGame(3);
   s.pts = 1e9;
-  assert.equal(G.hireKitten(s, 2), false, 'factory #3 already has Mochi');
+  const recruit = s.recruit;
+  assert.equal(G.hireKitten(s, 2), false, 'factory #3 already has a kitten');
   assert.equal(G.hireKitten(s, 0), true);
   assert.equal(s.pts, 1e9 - G.HIRE_COST[0]);
-  assert.equal(G.kittenAt(s, 0).name, 'Pixel');
+  assert.deepEqual(G.kittenAt(s, 0), { ...recruit, fac: 0 });
+  assert.notEqual(s.recruit.name, recruit.name, 'a new recruit turns up');
   assert.equal(G.hireKitten(s, 0), false, 'one per factory');
   assert.equal(G.hireKitten(s, 7), false, 'no such factory');
 });
 
-test('a working kitten runs its factory: faster, shipped straight to the balance, silo emptied', () => {
-  const s = crewGame(1), f = s.facs[0];
+test('a kitten runs its factory: shipped straight to the balance, silo emptied, never stalls', () => {
+  const s = crewGame(1), f = s.facs[0], k = s.crew[0];
   const plain = f.lines * G.lineRate(f);
   f.store = 300;
   s.pts = 0;
   G.step(s, 1);
   assert.equal(f.kitOn, true);
-  assert.equal(G.factoryRate(f), plain * G.KITTEN_BOOST);
+  assert.equal(G.factoryRate(f), plain * G.kittenBoost(s, k, 0));
   assert.ok(f.store < 300, 'the silo is being emptied');
   assert.ok(s.pts >= G.factoryRate(f), 'production goes straight to the balance');
 });
 
-test('a hungry kitten stops working and pulls the cat away; feeding it fixes both', () => {
+test('the favourite factory and traits change how fast a kitten runs a factory', () => {
   const s = crewGame(2);
+  const k = { name: 'Test', trait: 'gear', fav: 1 };
+  s.facs[0].turbo = 2;
+  assert.ok(Math.abs(G.kittenBoost(s, k, 0) - G.KITTEN_BOOST * 1.3) < 1e-9, 'Gearhead: +15% per turbo press');
+  assert.ok(Math.abs(G.kittenBoost(s, k, 1) - G.KITTEN_BOOST * G.FAV_BONUS) < 1e-9, 'favourite factory');
+  s.facs[1].dock = 2;
+  assert.ok(Math.abs(G.kittenBoost(s, { ...k, trait: 'pack' }, 1) - G.KITTEN_BOOST * G.FAV_BONUS * 1.4) < 1e-9, 'Packer: +20% per dock');
+  s.crew[0].trait = 'cheer';
+  assert.ok(Math.abs(G.kittenBoost(s, { ...k, trait: 'hard', fav: 4 }, 0) - G.KITTEN_BOOST * 1.3 * 1.15) < 1e-9, 'a Cheerleader helps the others');
+  assert.ok(Math.abs(G.kittenBoost(s, s.crew[0], 0) - (s.crew[0].fav === 0 ? G.FAV_BONUS : 1) * G.KITTEN_BOOST) < 1e-9, '...but not itself');
+  s.crew[0].trait = 'pal';
+  assert.equal(G.catClicks(s), G.CAT_CPS * 1.25, "Cat's pal: the cat clicks faster");
+  s.crew[0].trait = 'owl';
+  s.away = true;
+  assert.equal(G.kittenBoost(s, s.crew[0], 7), 1, 'no such factory');
+  assert.ok(G.kittenBoost(s, s.crew[0], 0) >= 2 * G.KITTEN_BOOST, 'Night owl: ×2 while away');
+});
+
+test('moving a kitten swaps it with the kitten already there', () => {
+  const s = crewGame(3);
   s.pts = 1e9;
   G.hireKitten(s, 0);
-  assert.equal(G.catFocus(s), 1);
-  s.crew[0].food = 0;
-  assert.equal(G.needsCare(s, s.crew[0]), true);
-  assert.equal(G.isWorking(s, s.crew[0]), false);
-  assert.ok(Math.abs(G.catFocus(s) - 0.5) < 1e-9, 'one of two kittens needs care: the cat clicks half as much');
-  G.syncCrew(s);
-  assert.equal(s.facs[s.crew[0].fac].kitOn, false);
-  s.pts = G.FEED_COST;
-  assert.equal(G.feedKitten(s, 0), true);
-  assert.equal(s.pts, 0);
-  assert.equal(G.isWorking(s, s.crew[0]), true);
-  assert.equal(G.feedKitten(s, 0), false, 'already full');
+  const a = s.crew[0], b = s.crew[1];
+  assert.equal(G.moveKitten(s, 0, 0), true);
+  assert.equal(a.fac, 0);
+  assert.equal(b.fac, 2);
+  assert.equal(G.moveKitten(s, 0, 1), true, 'to an empty factory');
+  assert.equal(a.fac, 1);
+  assert.equal(G.moveKitten(s, 0, 1), false, 'already there');
+  assert.equal(G.moveKitten(s, 0, 9), false, 'no such factory');
+  assert.equal(s.facs[0].kitOn, undefined, 'factory #1 is back to collecting');
 });
 
-test('needs drain only while working, at the tuned rate', () => {
+test('care time: once a day, feed, nap and play in any order make the crew happy for an hour', () => {
+  const s = crewGame(1), f = s.facs[0];
+  const before = G.factoryRate(f);
+  assert.equal(G.careReady(s, DAY), true);
+  assert.equal(G.doCare(s, DAY, 'play'), true);
+  assert.equal(G.doCare(s, DAY, 'play'), false, 'each step once');
+  assert.equal(G.doCare(s, DAY, 'feed'), true);
+  assert.equal(G.happy(s), false, 'not until all three are done');
+  assert.equal(G.doCare(s, DAY, 'nap'), true);
+  assert.equal(G.happy(s), true);
+  assert.equal(G.factoryRate(f), before * G.HAPPY_MULT);
+  assert.equal(G.careReady(s, DAY), false, 'done for today');
+  assert.equal(G.doCare(s, DAY, 'feed'), false);
+  G.step(s, G.HAPPY_SECONDS);
+  assert.equal(G.happy(s), false, 'an hour later');
+  G.step(s, 1);
+  assert.equal(G.factoryRate(f), before);
+  assert.equal(G.careReady(s, '2026-10-12'), true, 'tomorrow it comes round again');
+  assert.equal(G.careDone(s, '2026-10-12', 'feed'), false);
+});
+
+test('skipping care costs nothing, and time away counts down the happy hour', () => {
   const s = crewGame(1);
-  G.step(s, 120);
-  assert.ok(Math.abs(s.crew[0].food - 0.5) < 1e-6, 'food lasts 4 min of work');
-  assert.equal(s.crew[0].sleep, 1, 'sleep is not a need yet');
+  const rate = G.income(s);
+  G.applyOffline(s, 3600);
+  assert.equal(G.income(s), rate, 'neglect never slows the crew or the cat');
+  for (const c of G.CARE_STEPS) G.doCare(s, DAY, c);
+  G.applyOffline(s, 1800);
+  assert.equal(s.happy, G.HAPPY_SECONDS - 1800);
 });
 
-test('sleep and play unlock at 25M and 50M; a nap takes the kitten off work and refills sleep', () => {
-  const s = crewGame(1);
-  assert.equal(G.napKitten(s, 0), false, 'not learned yet');
-  s.pts = s.best = 2.5e7;
-  assert.deepEqual(G.checkLessons(s).map((n) => n.id), ['sleep']);
-  s.crew[0].sleep = 0.2;
-  assert.equal(G.napKitten(s, 0), true);
-  assert.equal(G.isWorking(s, s.crew[0]), false);
-  assert.equal(G.kittenMood(s, s.crew[0]), G.NAP_MOOD);
-  G.step(s, G.NAP_SECONDS);
-  assert.equal(G.napping(s.crew[0]), false);
-  assert.equal(s.crew[0].sleep, 1);
-  s.best = 5e7;
-  assert.deepEqual(G.checkLessons(s).map((n) => n.id), ['fun']);
-  s.crew[0].fun = 0;
-  assert.equal(G.playKitten(s, 0), true);
-  assert.equal(s.crew[0].fun, 1);
-});
-
-test('time away drains the crew too, so the cat earns less while nobody feeds the kittens', () => {
-  const cared = crewGame(1), neglected = crewGame(1);
-  cared.own.x2 = neglected.own.x2 = 3;
-  const a = G.applyOffline(cared, 60).points, b = G.applyOffline(neglected, 3600).points;
-  assert.ok(b < a * 60 * 0.5, 'an hour away earns far less than 60 cared-for minutes');
-  assert.ok(neglected.crew.every((k) => G.needsCare(neglected, k)));
-});
-
-test('the crew survives a save; bad crew data is repaired', () => {
+test('the crew survives a save; bad crew data is repaired; old kittens get a trait', () => {
   const s = crewGame(2);
   s.pts = s.best = s.total = 1e9;
   G.hireKitten(s, 0);
-  s.crew[0].food = 0.4;
+  G.doCare(s, DAY, 'feed');
   const back = G.deserialize(JSON.parse(JSON.stringify(G.serialize(s))));
   assert.deepEqual(G.serialize(back), G.serialize(s));
   const bad = G.deserialize(Object.assign(JSON.parse(JSON.stringify(G.serialize(s))),
-    { crew: [{ fac: 9 }, { fac: 0, name: 'Mochi', food: 7 }, { fac: 0, name: 'Twin' }] }));
+    { crew: [{ fac: 9, name: 'Lost' }, { fac: 0, name: 'Mochi', trait: 'laser', fav: 99 }, { fac: 0, name: 'Twin' }], happy: 1e9, care: { day: DAY, done: ['feed', 'dance'] } }));
   assert.equal(bad.crew.length, 1, 'unknown factories and second kittens are dropped');
-  assert.equal(bad.crew[0].food, 1, 'needs are clamped');
-  const old = G.deserialize({ v: 1, cat: true, goalIdx: 2, storeOpen: true, facs: [{ kit: 3 }] });
-  assert.equal(old.crew.length, 1, 'store saves from before the crew get the free kitten');
-  assert.equal('kit' in old.facs[0], false, 'old kitten counts are dropped');
+  assert.ok(G.TRAITS.some((t) => t.id === bad.crew[0].trait), 'unknown traits are replaced');
+  assert.ok(bad.crew[0].fav < G.MAX_FACTORIES);
+  assert.equal(bad.happy, G.HAPPY_SECONDS, 'clamped');
+  assert.deepEqual(bad.care.done, ['feed']);
+  const old = G.deserialize({ v: 1, cat: true, goalIdx: 2, storeOpen: true, facs: [{}, {}], crew: [{ name: 'Mochi', fac: 1, food: 0.2, nap: 3 }], lessons: 3 });
+  assert.deepEqual(Object.keys(old.crew[0]).sort(), ['fac', 'fav', 'name', 'trait'], 'needs are gone');
+  assert.deepEqual(G.deserialize({ v: 1, cat: true, goalIdx: 2, storeOpen: true, facs: [{}, {}], crew: [{ name: 'Mochi', fac: 1 }] }).crew, old.crew, 'the same kitten gets the same trait every time');
+  const none = G.deserialize({ v: 1, cat: true, goalIdx: 2, storeOpen: true, facs: [{ kit: 3 }] });
+  assert.equal(none.crew.length, 1, 'store saves from before the crew get the free kitten');
+  assert.equal('kit' in none.facs[0], false, 'old kitten counts are dropped');
 });
