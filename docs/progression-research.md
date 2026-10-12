@@ -330,3 +330,23 @@ Raw "points this week" always favours whoever started earliest. Fairer scores:
 - orders of magnitude gained this week;
 - league points for events (goals, promotions, care days, yarn catches);
 - a weekly fresh-start event.
+
+## 11. Kitten levels, underlings, golden yarn (built 2026-10-12)
+
+The user's choices:
+- promotion costs points;
+- kitten levels start at 10M;
+- 3 underlings per kitten, with art;
+- try golden yarn;
+- call them levels.
+
+Built:
+- **Levels to 10T.** 100M opens underlings, and levels 4–8 each give +50% income.
+- **Kitten XP and PROMOTE.**
+- **Underlings.** Hard-hat sprites stand at the belts, with trait matching and a team bonus.
+- **Golden yarn.** It gives ×5 for 60 s, every 6–10 minutes.
+
+**What tuning taught.**
+- **Fixed promotion prices don't work.** Kitten output grows from levels, teams, care, yarn and level bonuses at once. Early promotions paid back in 1–20 s, so the XP timer alone set the pace, and late ones walled for hours.
+- **Pricing in seconds of the crew's average output fixes it.** With promotions and underlings priced that way, payback stays at a few minutes at every stage and the search converged easily.
+- **Result:** about 2 hours from 0 to 10T, each level a bit longer than the last (except level 3 when care time is done straight away), with no wait over about 5 minutes for any play style tested.

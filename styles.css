@@ -536,3 +536,39 @@ button:focus-visible { outline: 2px dashed var(--amber); outline-offset: 3px; }
 #screen-factory.crewed .mgr-art, #screen-factory.crewed .mgr-art svg { width: 44px; height: 44px; }
 #screen-factory.crewed .mgr-body { gap: 3px; }
 #screen-factory.crewed .manager .care { min-height: 32px; }
+
+/* Levels, teams and golden yarn */
+#rate.frenzy { color: #FFE66B; text-shadow: 0 0 8px rgba(255, 230, 107, .7); white-space: nowrap; font-size: 11px; }
+.need.xp .meter span { background: var(--amber); }
+.kitten .xp-text, .mgr-xp { font-size: 11px; color: var(--dim); letter-spacing: .04em; }
+.team { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.member {
+  min-height: 52px; padding: 4px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  border: 1px dashed var(--rule-2); border-radius: 2px; background: transparent; color: var(--faint);
+  font: inherit; font-size: 9px; letter-spacing: .06em; text-align: center; line-height: 1.2; touch-action: manipulation;
+}
+.member .art { width: 24px; height: 24px; }
+.member .art svg { width: 100%; height: 100%; display: block; }
+.member.filled { border-style: solid; border-color: var(--amber); color: var(--amber); cursor: default; }
+.member.filled .art { animation: bob .5s steps(2) infinite; }
+.member.free { border-color: var(--amber); color: var(--bright); cursor: pointer; }
+.member.free:disabled { color: var(--faint); cursor: default; }
+.member.free .art { opacity: .5; }
+.member.locked { cursor: default; }
+.gold-yarn {
+  position: fixed; left: 0; z-index: 30; width: 56px; height: 56px; padding: 6px; border: 0; background: transparent;
+  color: #FFD23F; filter: drop-shadow(0 0 10px rgba(255, 210, 63, .9)); cursor: pointer; touch-action: manipulation;
+  animation: yarnroll 7s linear forwards;
+}
+.gold-yarn.rtl { animation-name: yarnroll-rtl; }
+.gold-yarn svg { width: 100%; height: 100%; display: block; animation: yarnspin .6s steps(4) infinite; }
+@keyframes yarnroll { from { transform: translateX(-64px); } to { transform: translateX(100vw); } }
+@keyframes yarnroll-rtl { from { transform: translateX(100vw); } to { transform: translateX(-64px); } }
+@keyframes yarnspin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .gold-yarn { animation: none; left: calc(50% - 28px); }
+  .gold-yarn svg, .member.filled .art { animation: none; }
+}
+/* An empty underling spot keeps its space, so every belt starts at the same place. */
+.bay .kit[hidden] { display: block; visibility: hidden; }
+#screen-factory:not(.crewed) .bay .kit[hidden] { display: none; }

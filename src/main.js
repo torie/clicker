@@ -196,7 +196,9 @@ $('adopt').addEventListener('click', () => {
 function renderMain() {
   const s = state;
   set($('best'), 'text', G.fmt(s.best));
-  set($('rate'), 'text', '+' + G.fmt(G.perSec(s)) + '/s');
+  // During a golden yarn frenzy the rate spot shows the frenzy instead (the header has no room for both).
+  set($('rate'), 'text', s.frenzy > 0 ? 'YARN ×' + G.FRENZY_MULT + ' · ' + Math.ceil(s.frenzy) + 's' : '+' + G.fmt(G.perSec(s)) + '/s');
+  set($('rate'), 'class', s.frenzy > 0 ? 'frenzy' : '');
   set($('pts'), 'text', G.fmt(s.pts));
   set($('pts'), 'class', 'num ' + (ui.taps ? (ui.taps % 2 ? 'bA' : 'bB') : ''));
   set($('per-click'), 'text', '+' + G.fmt(G.tapGain(s)));
@@ -221,15 +223,16 @@ function renderMain() {
       : 'CREW OK · ' + s.crew.length + (s.crew.length === 1 ? ' KITTEN' : ' KITTENS') + ' WORKING');
   }
 
-  // Stretch goal: goal 1 is bought (adopt the cat); goal 2 opens the store as soon as it's reached,
-  // and the meter moves on to goal 3. The store lives in the header so progress stays visible.
+  // The level meter: level 1 is bought (adopt the cat); later levels arrive as soon as they're reached
+  // and the meter moves on. The store lives in the header so progress stays visible.
   const goal = G.currentGoal(s), reached = s.pts >= goal.at, done = G.finalGoalReached(s);
   const frac = Math.min(1, s.pts / goal.at), need = Math.max(0, goal.at - s.pts), inc = G.income(s);
   set($('goal'), 'hidden', done || (reached && s.goalIdx === 0));
   set($('adopt'), 'hidden', !(reached && s.goalIdx === 0));
   set($('goal-done'), 'hidden', !done);
   set($('open-store'), 'hidden', !s.storeOpen);
-  set($('goal-title'), 'text', 'GOAL ' + (s.goalIdx + 1) + ' · ' + goal.at.toLocaleString('en-US'));
+  set($('goal-title'), 'text', 'LEVEL ' + (Math.min(s.goalIdx, G.GOALS.length - 1) + 1) + ' · ' + goal.at.toLocaleString('en-US'));
+  if (done) set($('done-title'), 'text', G.GOALS[G.GOALS.length - 1].at.toLocaleString('en-US') + ' REACHED');
   set($('goal-pct'), 'text', (Math.floor(frac * 1000) / 10).toFixed(1) + '%');
   set($('goal-fill'), 'width', (frac * 100).toFixed(2) + '%');
   set($('goal-left'), 'text', G.fmt(need) + ' TO GO');
@@ -277,10 +280,15 @@ function renderMain() {
 
 const KITTEN_SVG = '<svg viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true"><g fill="currentColor"><rect x="3" y="3" width="2" height="2"/><rect x="11" y="3" width="2" height="2"/><rect x="3" y="5" width="10" height="6"/><rect x="4" y="11" width="8" height="4"/><rect x="12" y="12" width="3" height="2"/></g><g fill="#0A140D"><rect x="5" y="7" width="2" height="2"/><rect x="9" y="7" width="2" height="2"/></g></svg>';
 
+// An underling: the kitten shape with a yellow hard hat.
+const SUB_SVG = '<svg viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true"><g fill="currentColor"><rect x="3" y="5" width="10" height="6"/><rect x="4" y="11" width="8" height="4"/><rect x="12" y="12" width="3" height="2"/></g><g fill="#FFE66B"><rect x="4" y="1" width="8" height="3"/><rect x="2" y="4" width="12" height="1"/></g><g fill="#0A140D"><rect x="5" y="7" width="2" height="2"/><rect x="9" y="7" width="2" height="2"/></g></svg>';
+const SUB_COLORS = ['#FFD479', '#FF9F43', '#F2F7F3', '#B7A58C', '#FFB3C7', '#C8A27A'];
+const subColor = (u) => SUB_COLORS[[...u.name].reduce((a, c) => a + c.charCodeAt(0), 0) % SUB_COLORS.length];
+
 const bays = [0, 1, 2, 3].map(() => {
   const el = h('div', 'bay');
   const kit = h('span', 'kit');
-  kit.innerHTML = KITTEN_SVG;
+  kit.innerHTML = SUB_SVG;
   const press = h('span', 'press'), belt = h('span', 'belt');
   const toks = [0, 1, 2, 3].map(() => belt.appendChild(h('span', 'tok')));
   const empty = h('span', null, 'EMPTY BAY · ADD A LINE');
@@ -349,6 +357,7 @@ function renderSlot(el, i) {
 
 // The manager card: when a kitten runs this factory it takes the collect button's place.
 $('mgr-move').addEventListener('click', () => openMove(state.crew.indexOf(G.kittenAt(state, ui.cur))));
+$('mgr-promote').addEventListener('click', () => promote(state.crew.indexOf(G.kittenAt(state, ui.cur))));
 $('mgr-art').addEventListener('click', () => openCrew());
 const mgrHire = makeRow(() => hire(ui.cur));
 $('mgr-hire-box').appendChild(mgrHire.el);
@@ -367,10 +376,12 @@ function renderManager() {
     $('mgr-art').style.color = kittenColor(idx);
   }
   set($('manager'), 'class', 'manager' + (G.happy(s) ? ' happy' : ''));
-  set($('mgr-title'), 'text', k.name.toUpperCase() + ' RUNS THIS FACTORY');
+  set($('mgr-title'), 'text', k.name.toUpperCase() + ' · LV ' + G.kittenLevel(k) + ' RUNS THIS FACTORY');
   set($('mgr-boost'), 'text', fmtBoost(G.kittenBoost(s, k, ui.cur)));
   set($('mgr-desc'), 'text', 'Ships everything · nothing to collect · ' + (k.fav === ui.cur ? '♥ its favourite' : 'loves #' + (k.fav + 1)));
   set($('mgr-trait'), 'text', traitLine(k));
+  set($('mgr-xp'), 'text', xpLine(k));
+  setPromote($('mgr-promote'), k);
 }
 
 function renderFactory() {
@@ -396,7 +407,10 @@ function renderFactory() {
   bays.forEach((b, i) => {
     const on = i < f.lines;
     set(b.el, 'class', 'bay' + (on ? '' : ' empty'));
-    set(b.kit, 'hidden', true); // the kitten runs the whole factory: it's shown on the manager card, not at one belt
+    // The lead kitten is on the manager card; its underlings work at the belts.
+    const u = k && run && (k.subs || [])[i];
+    set(b.kit, 'hidden', !u);
+    if (u) { set(b.kit, 'color', subColor(u)); set(b.kit, 'aria-label', u.name); }
     set(b.press, 'hidden', !on);
     set(b.belt, 'hidden', !on);
     set(b.empty, 'hidden', on);
@@ -427,7 +441,7 @@ function renderFactory() {
       disabled: locked || maxed,
       nm: '[' + f[e.id] + '/' + e.max + '] ' + (locked ? '████████ ???' : e.name),
       price: maxed ? 'MAX' : G.fmt(cost),
-      ds: locked ? 'UNLOCKS WITH GOAL 1' : moot ? 'No use while ' + k.name + ' ships everything'
+      ds: locked ? 'UNLOCKS WITH LEVEL 1' : moot ? 'No use while ' + k.name + ' ships everything'
         : run && e.id === 'dock' ? e.desc + ' · ' + k.name + ' the Packer: +20% speed per dock'
         : run && e.id === 'turbo' && k.trait === 'gear' ? e.desc + ' · ' + k.name + ' the Gearhead: +15% more per press' : e.desc,
       bar: locked || maxed ? '' : bar(s.pts / cost)
@@ -437,12 +451,39 @@ function renderFactory() {
 
 // ---------- kitten crew (from 10,000,000) ----------
 
-const INTRO = 'Kittens can now run your factories. A kitten ships everything straight to you, so there is nothing to collect and nothing stops when the silo fills. Your first kitten is free; hire one for each factory. Each kitten works best in its favourite factory, and its trait decides where else it shines. Once a day it\'s care time: feed, nap and play with the crew, and every kitten-run factory runs ×' + G.HAPPY_MULT + ' for an hour.';
+const INTRO = 'Kittens can now run your factories. A kitten ships everything straight to you, so there is nothing to collect and nothing stops when the silo fills. Your first kitten is free; hire one for each factory. Each kitten works best in its favourite factory, and its trait decides where else it shines. Working fills a kitten\'s XP bar: when it\'s full, PROMOTE it for points to make it faster. Once a day it\'s care time: feed, nap and play with the crew, and every kitten-run factory runs ×' + G.HAPPY_MULT + ' for an hour.';
+const INTRO_SUBS = 'From now on a kitten opens a slot for an underling at level ' + G.SLOT_LEVELS.join(', ') + ' (three in all). Underlings work at the belts of their lead\'s factory, need nothing, and give their lead XP. Each one speeds up the factory, more if it shares its lead\'s trait, and three with the same trait as the lead make a team bonus. The next underling waits on the crew screen: pick the kitten who gets it.';
 const KITTEN_COLORS = ['#FFD479', '#FF9F43', '#F2F7F3', '#B7A58C', '#FFB3C7', '#9CFFB5', '#C8A27A', '#8FB8FF'];
 const kittenColor = (i) => KITTEN_COLORS[i % KITTEN_COLORS.length];
 const fmtBoost = (b) => '×' + (Math.round(b * 10) / 10);
 const traitLine = (k) => G.traitOf(k).name.toUpperCase() + ' · ' + G.traitOf(k).desc;
 const minutesLeft = (s) => Math.ceil(s.happy / 60) + 'm';
+const xpLine = (k) => G.canPromote(k) ? 'XP FULL · READY TO PROMOTE' : 'XP ' + Math.floor(100 * (k.xp || 0) / G.xpNeed(k)) + '% · LV ' + (G.kittenLevel(k) + 1) + ' IN ' + fmtTime((G.xpNeed(k) - (k.xp || 0)) / G.xpRate(k));
+function fmtTime(sec) {
+  sec = Math.ceil(sec);
+  return sec < 60 ? sec + 's' : sec < 3600 ? Math.ceil(sec / 60) + 'm' : Math.floor(sec / 3600) + 'h ' + Math.ceil((sec % 3600) / 60) + 'm';
+}
+/** The PROMOTE button: shows the price once the XP bar is full. */
+function setPromote(btn, k) {
+  const ready = G.canPromote(k), cost = G.promoteCost(state, k);
+  set(btn, 'text', ready ? 'PROMOTE · ' + G.fmt(cost) : 'PROMOTE');
+  set(btn, 'disabled', !ready || state.pts < cost);
+  set(btn, 'class', 'care' + (ready && state.pts >= cost ? ' todo' : ''));
+}
+function promote(n) {
+  if (!G.promoteKitten(state, n)) return;
+  const k = state.crew[n];
+  flash('kitten-' + n);
+  if (G.kittenLevel(k) % G.MILESTONE_EVERY === 0) showToast(k.name.toUpperCase() + ' REACHED LV ' + G.kittenLevel(k) + ' · ×2 SPEED');
+  save();
+  render();
+}
+function hireSub(n) {
+  if (!G.hireSub(state, n)) return;
+  flash('kitten-' + n);
+  save();
+  render();
+}
 /** The player's local date: care time comes round once a day. */
 function today() {
   const d = new Date();
@@ -492,13 +533,26 @@ function syncKittenRows() {
     const top = h('div', 'top-line'), name = h('span', 'kname'), status = h('span', 'status');
     top.append(name, status);
     const job = h('span', 'job'), trait = h('span', 'ds trait');
-    const actions = h('div', 'care-actions'), move = h('button', 'care', 'MOVE');
+    const xp = h('div', 'need xp'), xpFill = h('span'), xpMeter = h('span', 'meter'), xpText = h('span', 'xp-text');
+    xpMeter.appendChild(xpFill);
+    xp.append(h('span', null, 'XP'), xpMeter);
+    const actions = h('div', 'care-actions'), promoteBtn = h('button', 'care'), move = h('button', 'care', 'MOVE');
+    promoteBtn.addEventListener('click', () => promote(i));
     move.addEventListener('click', () => openMove(i));
-    actions.append(move);
-    body.append(top, job, trait, actions);
+    actions.append(promoteBtn, move);
+    // The team: up to three underlings, a hire button for a free slot, or the level that opens the next one.
+    const team = h('div', 'team'), members = G.SLOT_LEVELS.map(() => {
+      const m = h('button', 'member'), art = h('span', 'art'), label = h('span', 'label');
+      art.innerHTML = SUB_SVG;
+      m.append(art, label);
+      m.addEventListener('click', () => hireSub(i));
+      team.appendChild(m);
+      return { m, art, label };
+    });
+    body.append(top, job, trait, xp, xpText, actions, team);
     el.append(art, body);
     $('kitten-rows').appendChild(el);
-    kittenRows.push({ el, name, status, job, trait, move });
+    kittenRows.push({ el, name, status, job, trait, xpFill, xpText, promoteBtn, move, team, members });
   }
 }
 
@@ -529,6 +583,9 @@ function renderCrew() {
     set(btn, 'disabled', done);
     set(btn, 'class', 'care' + (done ? '' : ' todo'));
   }
+  set($('crew-note'), 'text', G.underlingsOn(s) && s.subRecruit
+    ? 'NEXT UNDERLING: ' + s.subRecruit.name.toUpperCase() + ' · ' + G.traitOf(s.subRecruit).name.toUpperCase() + '. ★ = same trait as the lead (+' + Math.round(G.SUB_MATCH * 100) + '% instead of +' + Math.round(G.SUB_BONUS * 100) + '%). Tap a free slot to hire.'
+    : 'Each kitten works best in its favourite factory, and its trait decides where else it shines. MOVE swaps kittens around for free. Working fills the XP bar; when it\'s full, PROMOTE for points.');
   // Kittens
   syncKittenRows();
   s.crew.forEach((k, i) => {
@@ -536,9 +593,24 @@ function renderCrew() {
     set(r.el, 'class', 'kitten working' + (happy ? ' happy' : '') + flashCls('kitten-' + i));
     set(r.name, 'text', k.name);
     set(r.status, 'text', fav ? '♥ FAVOURITE' : 'LOVES #' + (k.fac >= 0 ? k.fav + 1 : '?'));
-    set(r.job, 'text', 'RUNS FACTORY #' + (k.fac + 1) + ' · ' + fmtBoost(G.kittenBoost(s, k, k.fac)) + ' · +' + G.fmt(G.factoryRate(s.facs[k.fac])) + '/s');
+    set(r.job, 'text', 'LV ' + G.kittenLevel(k) + ' · RUNS FACTORY #' + (k.fac + 1) + ' · ' + fmtBoost(G.kittenBoost(s, k, k.fac)) + ' · +' + G.fmt(G.factoryRate(s.facs[k.fac])) + '/s');
     set(r.trait, 'text', traitLine(k));
+    set(r.xpFill, 'width', (100 * Math.min(1, (k.xp || 0) / G.xpNeed(k))).toFixed(1) + '%');
+    set(r.xpText, 'text', xpLine(k));
+    setPromote(r.promoteBtn, k);
     set(r.move, 'hidden', s.facs.length < 2);
+    const on = G.underlingsOn(s), team = k.subs || [], open = G.slots(s, k), next = s.subRecruit, cost = G.subCost(s);
+    set(r.team, 'hidden', !on);
+    if (on) r.members.forEach((mb, j) => {
+      const u = team[j], free = !u && j < open && next;
+      set(mb.m, 'class', 'member' + (u ? ' filled' : free ? ' free' : ' locked'));
+      set(mb.m, 'disabled', !free || s.pts < cost);
+      set(mb.art, 'hidden', !u && !free);
+      if (u || free) set(mb.art, 'color', subColor(u || next));
+      set(mb.label, 'text', u ? u.name + (u.trait === k.trait ? ' ★' : '')
+        : free ? 'HIRE ' + next.name.toUpperCase() + (next.trait === k.trait ? ' ★' : '') + ' · ' + G.fmt(cost)
+        : 'SLOT AT LV ' + G.SLOT_LEVELS[j]);
+    });
   });
   // Hiring: the next recruit waits, and the player picks the factory
   const open = s.facs.map((f, i) => i).filter((i) => !G.kittenAt(s, i));
@@ -633,12 +705,14 @@ $('play-stop').addEventListener('click', closePlay);
 // The crew introduction, shown once when the crew arrives (after the store's boot sequence).
 function maybeShowIntro() {
   if (!ui.introDue || !$('lesson').hidden || !$('boot').hidden || !$('confirm').hidden) return;
+  const subs = ui.introDue === 'subs';
   ui.introDue = false;
-  $('lesson-art').innerHTML = KITTEN_SVG;
+  $('lesson-art').innerHTML = subs ? SUB_SVG : KITTEN_SVG;
   $('lesson-art').style.color = kittenColor(0);
-  $('lesson-dlg-step').textContent = 'NEW · KITTEN CREW';
-  $('lesson-dlg-title').textContent = state.crew.length ? state.crew[0].name.toUpperCase() + ' JOINS THE CREW' : 'KITTEN CREW';
-  $('lesson-dlg-text').textContent = INTRO;
+  $('lesson-dlg-step').textContent = subs ? 'LEVEL 3 · UNDERLINGS' : 'NEW · KITTEN CREW';
+  $('lesson-dlg-title').textContent = subs ? 'KITTENS HIRE UNDERLINGS'
+    : state.crew.length ? state.crew[0].name.toUpperCase() + ' JOINS THE CREW' : 'KITTEN CREW';
+  $('lesson-dlg-text').textContent = subs ? INTRO_SUBS : INTRO;
   $('lesson').hidden = false;
   $('lesson-go').focus({ preventScroll: true });
 }
@@ -809,7 +883,7 @@ function showStoreUnlock() {
     '<span class="ln" style="animation-delay:3.2s">&gt; JUKEBOX: ' + (G.TRACKS.length - 1) + ' NEW TRACKS</span>' +
     '<span class="ln" style="animation-delay:3.7s">&gt; FIND IT ANY TIME: THE BAG, TOP RIGHT</span>' +
     '<span class="ln" style="animation-delay:3.9s">&gt; ALSO NEW: HIRE KITTENS TO RUN YOUR FACTORIES (THE PAW, TOP RIGHT)</span>' +
-    '<span class="ln next" style="animation-delay:4.1s">&gt; NEXT GOAL: 100,000,000</span>' +
+    '<span class="ln next" style="animation-delay:4.1s">&gt; NEXT LEVEL: 100,000,000</span>' +
     '<button class="collect ln" id="boot-continue" style="animation-delay:4.7s">VISIT THE STORE</button>' +
     '<button class="later ln" id="boot-later" style="animation-delay:4.7s">LATER</button>';
   boot.hidden = false;
@@ -826,7 +900,7 @@ function showBoot() {
     '<span class="ln title" style="animation-delay:2.2s">CAT ADOPTED</span>' +
     '<span class="ln" style="animation-delay:2.8s">&gt; IT NOW CLICKS FOR YOU ' + G.CAT_CPS + '×/SEC</span>' +
     '<span class="ln" style="animation-delay:3.4s">&gt; TRAIN IT IN THE SHOP TO CLICK FASTER</span>' +
-    '<span class="ln next" style="animation-delay:4s">&gt; NEXT GOAL: 10,000,000</span>' +
+    '<span class="ln next" style="animation-delay:4s">&gt; NEXT LEVEL: 10,000,000</span>' +
     '<button class="collect ln" id="boot-continue" style="animation-delay:4.6s">CONTINUE</button>';
   boot.hidden = false;
   $('boot-continue').addEventListener('click', () => {
@@ -847,6 +921,35 @@ function showToast(text) {
 
 $('adopt-desc').textContent = '1,000,000 · IT CLICKS FOR YOU ' + G.CAT_CPS + '×/SEC';
 
+// ---------- golden yarn (after the cat) ----------
+// Every 6-10 minutes of play a golden yarn ball rolls across the screen. Catching it makes all income
+// ×5 for a minute; missing it costs nothing.
+const YARN_MIN = 360, YARN_MAX = 600, YARN_ROLL_MS = 7000;
+ui.yarnIn = YARN_MIN + Math.random() * (YARN_MAX - YARN_MIN);
+function tickYarn(dt) {
+  const yarn = $('gold-yarn');
+  const quiet = $('boot').hidden && $('lesson').hidden && $('confirm').hidden && $('play').hidden && $('move').hidden;
+  if (!state.cat || document.hidden || !yarn.hidden || !quiet || ui.view === 'store') return;
+  ui.yarnIn -= dt;
+  if (ui.yarnIn > 0) return;
+  ui.yarnIn = YARN_MIN + Math.random() * (YARN_MAX - YARN_MIN);
+  yarn.style.top = Math.round(22 + Math.random() * 46) + '%';
+  yarn.classList.toggle('rtl', Math.random() < 0.5);
+  yarn.hidden = false;
+  yarn.style.animation = 'none';
+  void yarn.offsetWidth; // restart the roll
+  yarn.style.animation = '';
+  clearTimeout(tickYarn.timer);
+  tickYarn.timer = setTimeout(() => { yarn.hidden = true; }, YARN_ROLL_MS);
+}
+$('gold-yarn').addEventListener('click', () => {
+  $('gold-yarn').hidden = true;
+  if (!G.catchYarn(state)) return;
+  showToast('GOLDEN YARN · ALL INCOME ×' + G.FRENZY_MULT + ' FOR ' + G.FRENZY_SECONDS + 's');
+  save();
+  render();
+});
+
 // ---------- loop ----------
 
 function render() {
@@ -854,7 +957,11 @@ function render() {
   set($('screen-factory'), 'hidden', ui.view !== 'factory');
   set($('screen-store'), 'hidden', ui.view !== 'store');
   set($('screen-crew'), 'hidden', ui.view !== 'crew');
-  if (G.checkStoreUnlock(state)) { save(); showStoreUnlock(); ui.introDue = true; }
+  const reached = G.checkGoal(state);
+  if (reached >= 1) save();
+  if (reached === 1) { showStoreUnlock(); ui.introDue = 'crew'; }
+  if (reached === 2) ui.introDue = 'subs';
+  if (reached > 2) showToast('LEVEL ' + (reached + 1) + ' REACHED · ALL INCOME +' + Math.round((G.LEVEL_BONUS - 1) * 100) + '%');
   maybeShowIntro();
   if (ui.view === 'crew') renderCrew();
   if (ui.view === 'factory') renderFactory();
@@ -867,6 +974,7 @@ setInterval(() => {
   const now = performance.now(), dt = (now - last) / 1000;
   last = now;
   G.step(state, Math.min(dt, G.MAX_OFFLINE_SECONDS));
+  tickYarn(dt);
   if (state.cat && ui.view === 'main' && !document.hidden) {
     ui.catTimer += dt;
     if (ui.catTimer >= 0.5) {

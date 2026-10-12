@@ -37,23 +37,37 @@ export const EXTENSIONS = [
   {id: 'dock', name: 'Loading dock', desc: '20% ships straight to your balance', base: 5000, grow: 5, max: 3, min: 0}
 ];
 
+// The levels (the UI says LEVEL n): stretch goals ×10 apart. Level 1 is bought (it adopts the cat);
+// the rest are reached by holding that many points. Level 2 opens the store and the kitten crew,
+// level 3 lets kittens hire underlings, and every level after that adds LEVEL_BONUS to all income.
 export const GOALS = [
   {at: 1e6, teaser: 'REWARD: A CAT THAT CLICKS FOR YOU'},
-  {at: 1e7, teaser: 'REWARD: A STORE WITH CAT SKINS + MUSIC'},
-  {at: 1e8, teaser: 'REWARD: LEVEL UP YOUR KITTENS'}
+  {at: 1e7, teaser: 'REWARD: A STORE + A KITTEN CREW'},
+  {at: 1e8, teaser: 'REWARD: KITTENS HIRE UNDERLINGS'},
+  {at: 1e9, teaser: 'REWARD: ALL INCOME +50%'},
+  {at: 1e10, teaser: 'REWARD: ALL INCOME +50%'},
+  {at: 1e11, teaser: 'REWARD: ALL INCOME +50%'},
+  {at: 1e12, teaser: 'REWARD: ALL INCOME +50%'},
+  {at: 1e13, teaser: 'REWARD: ALL INCOME +50% · END OF ERA 1'}
 ];
+export const LEVEL_BONUS = 1.5;      // ×1.5 to all income for every level from 4 on (keep the teasers in step)
+
+// Golden yarn: after the cat arrives it sometimes rolls past (the UI decides when). Catching it
+// starts a frenzy: all income ×5 for a minute. Missing it costs nothing.
+export const FRENZY_MULT = 5;
+export const FRENZY_SECONDS = 60;
 
 // The kitten crew (from goal 2). Until 10M the cat is the only kitten; it clicks the button. From 10M
 // the player hires one kitten per factory. A kitten runs its factory: production ships straight to the
 // balance, the silo empties, and the factory runs faster. Nothing drains and nothing is ever taken away:
 // the player's decisions are where each kitten works (its favourite factory and its trait) and, once a
-// day, care time (feed, nap, play), which makes the crew happy for an hour.
-// (Next, at 100M: kittens level up and hire underlings they look after themselves.)
+// day, care time (feed, nap, play), which makes the crew happy for an hour. Kittens level up from 10M
+// and hire underlings from 100M (below).
 export const HIRE_COST = [450000, 900000, 1800000, 3600000, 7200000]; // per factory; the first kitten is free
 // A kitten-run factory never stalls on a full silo and needs no collecting, which is a big speed-up on
-// its own (turbo presses and lines stop being held back by the silo). On top of that it runs ×1.7, and
-// the favourite factory, traits and care time add to it.
-export const KITTEN_BOOST = 1.7;
+// its own (turbo presses and lines stop being held back by the silo). So the base boost is ×1, and the
+// favourite factory, traits, levels, underlings and care time add to it.
+export const KITTEN_BOOST = 1;
 export const FAV_BONUS = 1.5;        // in its favourite factory
 export const TRAITS = [
   {id: 'hard', name: 'Hard worker', desc: 'Runs its factory ×1.3 faster'},
@@ -63,6 +77,32 @@ export const TRAITS = [
   {id: 'pal', name: "Cat's pal", desc: 'The cat clicks +25% faster'},
   {id: 'owl', name: 'Night owl', desc: 'Works ×2 while you are away'}
 ];
+// Kitten levels (from 10M). Working fills a kitten's XP bar (seconds of work, faster in its favourite
+// factory and with underlings); once it's full, PROMOTE costs points. Each level runs its factory
+// ×LEVEL_STEP faster, and every MILESTONE_EVERY-th level doubles it. No cap, no decay, nothing lost on MOVE.
+export const XP_BASE = 180;           // seconds of work from level 1 to 2...
+export const XP_GROW = 1.04;          // ...×1.04 for each level after
+export const XP_FAV = 1.5;           // XP ×1.5 in its favourite factory
+// Promotions and underlings are priced in seconds of the crew's average output (without the temporary
+// yarn and care bonuses), so they pay back in minutes at every stage instead of becoming free or out of
+// reach. The average covers the whole crew, so moving a kitten doesn't change the price.
+export const PROMO_SECONDS = 40;     // a promotion costs this many seconds of average kitten output...
+export const PROMO_GROW = 1.06;      // ...×1.06 for each level the kitten already has
+export const PROMO_MIN = 100000;
+export const LEVEL_STEP = 1.16;
+export const MILESTONE_EVERY = 5;
+// Underlings (from 100M): a kitten's levels 5, 10 and 15 each open a slot. Underlings need nothing; each
+// adds to its lead's factory (more if it shares the lead's trait), and gives the lead XP. Three that all
+// share the lead's trait make a team bonus.
+export const SLOT_LEVELS = [5, 10, 15];
+export const SUB_SECONDS = 300;      // the first underling costs this many seconds of average kitten output...
+export const SUB_GROW = 1.8;         // ...×1.8 for each one hired after
+export const SUB_BONUS = 0.5;        // +50% to the lead's factory...
+export const SUB_MATCH = 1.0;        // ...+100% if it shares the lead's trait
+export const TEAM_BONUS = 1.5;       // three matching underlings: ×1.5 more
+export const SUB_XP = 0.5;           // +50% XP for the lead per underling
+export const SUB_NAMES = ['Bit', 'Byte', 'Pip', 'Dot', 'Nib', 'Jot', 'Zip', 'Fig', 'Pea', 'Bun', 'Kip', 'Tad', 'Wink', 'Mote', 'Speck'];
+
 export const CARE_STEPS = ['feed', 'nap', 'play'];  // once a day, in any order
 export const HAPPY_MULT = 2;         // care time done: every kitten-run factory ×2...
 export const HAPPY_SECONDS = 3600;   // ...for an hour (time away counts too)
@@ -90,7 +130,7 @@ export const TRACKS = [
 
 export function newGame() {
   return {v: 1, pts: 0, best: 0, total: 0, own: {auto: 0, x2: 0, x4: 0, luck: 0, power: 0, train: 0}, facs: [], goalIdx: 0, cat: false,
-    storeOpen: false, crew: [], recruit: null, care: {day: '', done: []}, happy: 0, away: false,
+    storeOpen: false, crew: [], recruit: null, subRecruit: null, care: {day: '', done: []}, happy: 0, frenzy: 0, away: false,
     seed: Math.floor(Math.random() * 2 ** 31), rolls: 0, skins: ['classic'], skin: 'classic', tracks: ['silo'], track: 'silo', savedAt: Date.now()};
 }
 
@@ -106,10 +146,13 @@ export const perClick = (s) => Math.pow(2, s.own.x2) * Math.pow(4, s.own.x4);
 export const catClicks = (s) => (s.cat ? (CAT_CPS + CAT_TRAIN * s.own.train) * (1 + 0.25 * crewTrait(s, 'pal')) : 0);
 /** The cat's clicks are plain clicks: Power tap only works for the player's own taps. */
 export const catRate = (s) => catClicks(s) * perClick(s);
-export const perSec = (s) => s.own.auto + catRate(s);
+/** Everything earned is multiplied by the level bonus and, while it lasts, the golden yarn frenzy. */
+export const levelBonus = (s) => Math.pow(LEVEL_BONUS, Math.max(0, s.goalIdx - 3));
+export const gainMult = (s) => levelBonus(s) * (s.frenzy > 0 ? FRENZY_MULT : 1);
+export const perSec = (s) => (s.own.auto + catRate(s)) * gainMult(s);
 export const lineRate = (f) => LINE_RATE * Math.pow(TIER_OUT, f.i) * Math.pow(2, f.turbo);
-/** `kitOn` and `boost` are set by syncCrew while a kitten runs the factory. */
-export const factoryRate = (f) => f.lines * lineRate(f) * (f.kitOn ? f.boost : 1);
+/** `kitOn` and `boost` are set by syncCrew while a kitten runs the factory; `gm` is gainMult. */
+export const factoryRate = (f) => f.lines * lineRate(f) * (f.kitOn ? f.boost : 1) * (f.gm || 1);
 export const siloCap = (f) => SILO_BASE * Math.pow(TIER_OUT, f.i) * Math.pow(2, f.silo);
 
 // ---------- kitten crew ----------
@@ -119,9 +162,34 @@ export const kittenAt = (s, i) => s.crew.find((k) => k.fac === i) || null;
 export const traitOf = (k) => TRAITS.find((t) => t.id === k.trait) || TRAITS[0];
 const crewTrait = (s, id) => (crewOn(s) ? s.crew.filter((k) => k.trait === id).length : 0);
 export const happy = (s) => s.happy > 0;
+export const underlingsOn = (s) => s.goalIdx >= 3;
 
-/** How much faster kitten k would run factory i (it doesn't have to be there now). */
-export function kittenBoost(s, k, i) {
+// Levels and teams. A recruit has no level or team yet, so everything defaults.
+export const kittenLevel = (k) => k.lvl || 1;
+export const xpNeed = (k) => XP_BASE * Math.pow(XP_GROW, kittenLevel(k) - 1);
+export const canPromote = (k) => (k.xp || 0) >= xpNeed(k);
+export const promoteCost = (s, k) => Math.ceil(Math.max(PROMO_MIN, PROMO_SECONDS * crewPace(s) * Math.pow(PROMO_GROW, kittenLevel(k) - 1)));
+export const levelMult = (lvl) => Math.pow(LEVEL_STEP, lvl - 1) * Math.pow(2, Math.floor(lvl / MILESTONE_EVERY));
+export const slots = (s, k) => (underlingsOn(s) ? SLOT_LEVELS.filter((l) => kittenLevel(k) >= l).length : 0);
+const subs = (k) => k.subs || [];
+export function teamMult(k) {
+  const t = subs(k), match = t.filter((u) => u.trait === k.trait).length;
+  const m = 1 + t.reduce((a, u) => a + (u.trait === k.trait ? SUB_MATCH : SUB_BONUS), 0);
+  return m * (match === SLOT_LEVELS.length ? TEAM_BONUS : 1);
+}
+export const xpRate = (k) => (k.fav === k.fac ? XP_FAV : 1) * (1 + SUB_XP * subs(k).length);
+
+/** Average output of a kitten-run factory, without the yarn, care and level bonuses: the price unit for crew upgrades. */
+export function crewPace(s) {
+  if (!crewOn(s) || !s.crew.length) return 0;
+  return s.crew.reduce((a, k) => {
+    const f = s.facs[k.fac];
+    return a + (f ? f.lines * lineRate(f) * kittenBoost(s, k, k.fac, false) : 0);
+  }, 0) / s.crew.length;
+}
+
+/** How much faster kitten k would run factory i (it doesn't have to be there now). `bonus`: count care time. */
+export function kittenBoost(s, k, i, bonus = true) {
   const f = s.facs[i];
   if (!f) return 1;
   let b = KITTEN_BOOST * (k.fav === i ? FAV_BONUS : 1);
@@ -130,15 +198,17 @@ export function kittenBoost(s, k, i) {
   if (k.trait === 'pack') b *= 1 + 0.2 * f.dock;
   if (k.trait === 'owl' && s.away) b *= 2;
   b *= 1 + 0.15 * (crewTrait(s, 'cheer') - (k.trait === 'cheer' ? 1 : 0));
-  return b * (happy(s) ? HAPPY_MULT : 1);
+  return b * levelMult(kittenLevel(k)) * teamMult(k) * (bonus && happy(s) ? HAPPY_MULT : 1);
 }
 
 /** Marks each factory run by a kitten and how much faster it runs. */
 export function syncCrew(s) {
+  const gm = gainMult(s);
   s.facs.forEach((f, i) => {
     const k = crewOn(s) && kittenAt(s, i);
     f.kitOn = k ? true : undefined;
     f.boost = k ? kittenBoost(s, k, i) : undefined;
+    f.gm = gm;
   });
 }
 
@@ -169,8 +239,52 @@ export const hireCost = (i) => HIRE_COST[i];
 export function hireKitten(s, i, free = false) {
   if (!crewOn(s) || !s.facs[i] || kittenAt(s, i) || (!free && s.pts < hireCost(i))) return false;
   if (!free) s.pts -= hireCost(i);
-  s.crew.push({...s.recruit, fac: i});
+  const r = s.recruit;
+  s.crew.push({name: r.name, trait: r.trait, fav: r.fav, fac: i, lvl: 1, xp: 0, subs: []});
   s.recruit = rollKitten(s);
+  syncCrew(s);
+  return true;
+}
+
+/** Promotes kitten n once its XP bar is full, for points. */
+export function promoteKitten(s, n) {
+  const k = s.crew[n];
+  if (!k || !canPromote(k) || s.pts < promoteCost(s, k)) return false;
+  s.pts -= promoteCost(s, k);
+  k.lvl = kittenLevel(k) + 1;
+  k.xp = 0;
+  syncCrew(s);
+  return true;
+}
+
+/** Fills every kitten's XP bar (it stops at full until the kitten is promoted). */
+function tickXp(s, dt) {
+  for (const k of s.crew) k.xp = Math.min(xpNeed(k), (k.xp || 0) + xpRate(k) * dt);
+}
+
+function rollSub(s) {
+  const used = new Set(s.crew.flatMap((k) => subs(k).map((u) => u.name)));
+  const free = SUB_NAMES.filter((n) => !used.has(n));
+  const name = free.length ? free[Math.floor(rand(s) * free.length)] : 'Kit ' + (used.size + 1);
+  return {name, trait: TRAITS[Math.floor(rand(s) * TRAITS.length)].id};
+}
+export const subCount = (s) => s.crew.reduce((a, k) => a + subs(k).length, 0);
+export const subCost = (s) => Math.ceil(Math.max(PROMO_MIN, SUB_SECONDS * crewPace(s) * Math.pow(SUB_GROW, subCount(s))));
+/** Hires the waiting underling into kitten n's team, if it has a free slot. */
+export function hireSub(s, n) {
+  const k = s.crew[n];
+  if (!k || !s.subRecruit || subs(k).length >= slots(s, k) || s.pts < subCost(s)) return false;
+  s.pts -= subCost(s);
+  k.subs = [...subs(k), {...s.subRecruit}];
+  s.subRecruit = rollSub(s);
+  syncCrew(s);
+  return true;
+}
+
+/** Catching the golden yarn: all income ×FRENZY_MULT for FRENZY_SECONDS. */
+export function catchYarn(s) {
+  if (!s.cat) return false;
+  s.frenzy = FRENZY_SECONDS;
   syncCrew(s);
   return true;
 }
@@ -230,15 +344,17 @@ export function step(s, dt) {
     earn(s, r * DOCK_SHARE * f.dock * t);
   }
   if (s.happy > 0) s.happy = Math.max(0, s.happy - dt);
+  if (s.frenzy > 0) s.frenzy = Math.max(0, s.frenzy - dt);
+  if (crewOn(s)) tickXp(s, dt);
 }
 
 /** Power tap's part of every tap: a share of the income per second. Lucky clicks don't multiply it. */
 export const powerGain = (s) => s.own.power * POWER_SHARE * income(s);
-export const tapGain = (s) => perClick(s) + powerGain(s);
+export const tapGain = (s) => perClick(s) * gainMult(s) + powerGain(s);
 
 export function tap(s, rng = Math.random) {
   const lucky = rng() < LUCK_CHANCE * s.own.luck;
-  const gain = perClick(s) * (lucky ? LUCK_MULT : 1) + powerGain(s);
+  const gain = perClick(s) * gainMult(s) * (lucky ? LUCK_MULT : 1) + powerGain(s);
   earn(s, gain);
   return {gain, lucky};
 }
@@ -290,7 +406,7 @@ export function buyExtension(s, i, id) {
   return true;
 }
 
-export const currentGoal = (s) => GOALS[s.goalIdx];
+export const currentGoal = (s) => GOALS[Math.min(s.goalIdx, GOALS.length - 1)];
 
 export function adoptCat(s) {
   if (s.goalIdx !== 0 || s.pts < GOALS[0].at) return false;
@@ -301,19 +417,22 @@ export function adoptCat(s) {
 }
 
 /**
- * Goal 2 needs no purchase: the first time the player holds 10,000,000 after adopting the cat,
- * the store opens for good and the meter moves on to goal 3. Returns true on that moment.
+ * Levels after the first need no purchase: the first time the player holds the level's points, its
+ * reward arrives and the meter moves on. Level 2 (10M) opens the store and the crew; level 3 (100M)
+ * opens underlings; later levels add the level bonus. Returns the index of the level just reached, or -1.
  */
-export function checkStoreUnlock(s) {
-  if (s.storeOpen || s.goalIdx !== 1 || s.pts < GOALS[1].at) return false;
-  s.storeOpen = true;
-  s.goalIdx = 2;
-  startCrew(s);
-  return true;
+export function checkGoal(s) {
+  const i = s.goalIdx;
+  if (i < 1 || i >= GOALS.length || s.pts < GOALS[i].at) return -1;
+  if (i === 1) { s.storeOpen = true; startCrew(s); }
+  s.goalIdx = i + 1;
+  if (underlingsOn(s) && !s.subRecruit) s.subRecruit = rollSub(s);
+  syncCrew(s);
+  return i;
 }
 
-/** True once the last goal has been reached (its reward isn't designed yet). */
-export const finalGoalReached = (s) => s.goalIdx === GOALS.length - 1 && s.pts >= GOALS[s.goalIdx].at;
+/** True once the last level has been reached. */
+export const finalGoalReached = (s) => s.goalIdx >= GOALS.length;
 
 function buyCosmetic(s, list, owned, id) {
   const item = list.find((x) => x.id === id);
@@ -350,9 +469,10 @@ export function applyOffline(s, seconds) {
 }
 
 export function serialize(s) {
-  return {v: 1, pts: s.pts, best: s.best, total: s.total, own: {...s.own}, facs: s.facs.map(({kitOn, boost, ...f}) => f),
-    goalIdx: s.goalIdx, cat: s.cat, storeOpen: s.storeOpen, crew: s.crew.map((k) => ({...k})),
-    recruit: s.recruit && {...s.recruit}, care: {day: s.care.day, done: [...s.care.done]}, happy: s.happy, seed: s.seed, rolls: s.rolls,
+  return {v: 1, pts: s.pts, best: s.best, total: s.total, own: {...s.own}, facs: s.facs.map(({kitOn, boost, gm, ...f}) => f),
+    goalIdx: s.goalIdx, cat: s.cat, storeOpen: s.storeOpen, crew: s.crew.map((k) => ({...k, subs: subs(k).map((u) => ({...u}))})),
+    recruit: s.recruit && {...s.recruit}, subRecruit: s.subRecruit && {...s.subRecruit}, care: {day: s.care.day, done: [...s.care.done]},
+    happy: s.happy, frenzy: s.frenzy, seed: s.seed, rolls: s.rolls,
     skins: [...s.skins], skin: s.skin,
     tracks: [...s.tracks], track: s.track, savedAt: s.savedAt};
 }
@@ -382,7 +502,7 @@ export function deserialize(data) {
     });
   }
   s.cat = data.cat === true;
-  s.goalIdx = Math.min(int(data.goalIdx), GOALS.length - 1);
+  s.goalIdx = Math.min(int(data.goalIdx), GOALS.length);
   if (s.cat && s.goalIdx === 0) s.goalIdx = 1;
   s.storeOpen = data.storeOpen === true && s.goalIdx >= 1;
   if (s.storeOpen && s.goalIdx < 2) s.goalIdx = 2; // saves from before goal 3 existed
@@ -399,10 +519,16 @@ export function deserialize(data) {
     };
     const saved = Array.isArray(data.crew) ? data.crew : [];
     s.crew = [];
+    const sub = (u) => (u && typeof u.name === 'string' && u.name && u.name.length <= 20 && TRAITS.some((t) => t.id === u.trait)
+      ? {name: u.name, trait: u.trait} : null);
     for (const k of saved) {
       const fac = k && Number.isInteger(k.fac) ? k.fac : -1, n = kitten(k);
       if (!n || !s.facs[fac] || kittenAt(s, fac) || s.crew.some((x) => x.name === n.name)) continue;
-      s.crew.push({...n, fac});
+      const lvl = Math.max(1, int(k.lvl, 500)), team = (Array.isArray(k.subs) ? k.subs : []).map(sub).filter(Boolean);
+      const kit = {...n, fac, lvl, xp: 0, subs: []};
+      kit.subs = team.slice(0, SLOT_LEVELS.filter((l) => lvl >= l).length);
+      kit.xp = Math.min(num(k.xp), xpNeed(kit));
+      s.crew.push(kit);
     }
     if (!s.crew.length) startCrew(s);
     const r = kitten(data.recruit);
@@ -411,12 +537,14 @@ export function deserialize(data) {
       s.care = {day: data.care.day, done: CARE_STEPS.filter((x) => data.care.done.includes(x))};
     }
     s.happy = Math.min(num(data.happy), HAPPY_SECONDS);
+    if (underlingsOn(s)) s.subRecruit = sub(data.subRecruit) || rollSub(s);
     syncCrew(s);
   }
   s.skins = ownedList(SKINS, data.skins);
   s.skin = s.skins.includes(data.skin) ? data.skin : SKINS[0].id;
   s.tracks = ownedList(TRACKS, data.tracks);
   s.track = s.tracks.includes(data.track) ? data.track : TRACKS[0].id;
+  s.frenzy = s.cat ? Math.min(num(data.frenzy), FRENZY_SECONDS) : 0;
   s.savedAt = num(data.savedAt, Date.now());
   return s;
 }

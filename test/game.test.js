@@ -133,12 +133,13 @@ test('saves round-trip and bad data falls back to defaults', () => {
 
 test('the store opens once, when 10,000,000 is reached after adopting the cat', () => {
   const s = rich(2e7);
-  assert.equal(G.checkStoreUnlock(s), false, 'needs the cat first');
+  assert.equal(G.checkGoal(s), -1, 'needs the cat first');
   s.cat = true;
   s.goalIdx = 1;
-  assert.equal(G.checkStoreUnlock(s), true);
-  assert.equal(G.currentGoal(s).at, 1e8, 'the meter moves on to goal 3');
-  assert.equal(G.checkStoreUnlock(s), false, 'only fires once');
+  assert.equal(G.checkGoal(s), 1);
+  assert.equal(s.storeOpen, true);
+  assert.equal(G.currentGoal(s).at, 1e8, 'the meter moves on to level 3');
+  assert.equal(G.checkGoal(s), -1, 'only fires once');
   s.pts = 0;
   assert.equal(s.storeOpen, true, 'stays open after spending');
 });
@@ -165,23 +166,35 @@ test('saved cosmetics are validated', () => {
   assert.deepEqual(s.tracks, ['silo']);
   assert.equal(s.track, 'silo');
   assert.equal(G.deserialize({ v: 1, storeOpen: true }).storeOpen, false, 'store needs goal 2');
-  assert.equal(G.deserialize({ v: 1, cat: true, goalIdx: 1, storeOpen: true }).goalIdx, 2, 'older store saves move on to goal 3');
+  assert.equal(G.deserialize({ v: 1, cat: true, goalIdx: 1, storeOpen: true }).goalIdx, 2, 'older store saves move on to level 3');
   const old = G.deserialize({ v: 1, pts: 5 });
   assert.equal(old.skin, 'classic', 'saves from before the store still load');
 });
 
-test('goal 3 is 100,000,000 and is the last goal for now', () => {
-  const s = Object.assign(rich(1e8 - 1), { cat: true, goalIdx: 2, storeOpen: true });
-  assert.equal(G.finalGoalReached(s), false);
-  s.pts = 1e8;
+test('the levels go ×10 from 1M to 10T; 100M opens underlings and later levels add +25% income', () => {
+  assert.deepEqual(G.GOALS.map((g) => g.at), [1e6, 1e7, 1e8, 1e9, 1e10, 1e11, 1e12, 1e13]);
+  const s = Object.assign(rich(1e8), { cat: true, goalIdx: 2, storeOpen: true });
+  s.facs.push(G.newFactory(0));
+  s.crew = [{ name: 'Mochi', trait: 'hard', fav: 0, fac: 0, lvl: 1, xp: 0, subs: [] }];
+  assert.equal(G.underlingsOn(s), false);
+  assert.equal(G.checkGoal(s), 2);
+  assert.equal(G.underlingsOn(s), true);
+  assert.ok(s.subRecruit, 'the first underling waits');
+  assert.equal(G.levelBonus(s), 1);
+  s.pts = 1e9;
+  assert.equal(G.checkGoal(s), 3);
+  assert.equal(G.levelBonus(s), G.LEVEL_BONUS);
+  for (let i = 4; i < G.GOALS.length; i++) { s.pts = G.GOALS[i].at; assert.equal(G.checkGoal(s), i); }
   assert.equal(G.finalGoalReached(s), true);
+  assert.equal(G.checkGoal(s), -1, 'nothing after the last level');
+  assert.ok(Math.abs(G.levelBonus(s) - Math.pow(G.LEVEL_BONUS, 5)) < 1e-9);
 });
 
 // A player who has just reached 10M, with the cat and `n` factories.
 function crewGame(n = 1, seed = 1) {
   const s = Object.assign(rich(1e7), { cat: true, goalIdx: 1, seed });
   for (let i = 0; i < n; i++) s.facs.push(G.newFactory(i));
-  assert.equal(G.checkStoreUnlock(s), true);
+  assert.equal(G.checkGoal(s), 1);
   return s;
 }
 const DAY = '2026-10-11';
@@ -213,7 +226,7 @@ test('hiring: the waiting recruit joins, one kitten per factory, priced by facto
   assert.equal(G.hireKitten(s, 2), false, 'factory #3 already has a kitten');
   assert.equal(G.hireKitten(s, 0), true);
   assert.equal(s.pts, 1e9 - G.HIRE_COST[0]);
-  assert.deepEqual(G.kittenAt(s, 0), { ...recruit, fac: 0 });
+  assert.deepEqual(G.kittenAt(s, 0), { ...recruit, fac: 0, lvl: 1, xp: 0, subs: [] });
   assert.notEqual(s.recruit.name, recruit.name, 'a new recruit turns up');
   assert.equal(G.hireKitten(s, 0), false, 'one per factory');
   assert.equal(G.hireKitten(s, 7), false, 'no such factory');
@@ -311,9 +324,116 @@ test('the crew survives a save; bad crew data is repaired; old kittens get a tra
   assert.equal(bad.happy, G.HAPPY_SECONDS, 'clamped');
   assert.deepEqual(bad.care.done, ['feed']);
   const old = G.deserialize({ v: 1, cat: true, goalIdx: 2, storeOpen: true, facs: [{}, {}], crew: [{ name: 'Mochi', fac: 1, food: 0.2, nap: 3 }], lessons: 3 });
-  assert.deepEqual(Object.keys(old.crew[0]).sort(), ['fac', 'fav', 'name', 'trait'], 'needs are gone');
+  assert.deepEqual(Object.keys(old.crew[0]).sort(), ['fac', 'fav', 'lvl', 'name', 'subs', 'trait', 'xp'], 'needs are gone');
+  assert.equal(old.crew[0].lvl, 1, 'kittens from before levels start at level 1');
   assert.deepEqual(G.deserialize({ v: 1, cat: true, goalIdx: 2, storeOpen: true, facs: [{}, {}], crew: [{ name: 'Mochi', fac: 1 }] }).crew, old.crew, 'the same kitten gets the same trait every time');
   const none = G.deserialize({ v: 1, cat: true, goalIdx: 2, storeOpen: true, facs: [{ kit: 3 }] });
   assert.equal(none.crew.length, 1, 'store saves from before the crew get the free kitten');
   assert.equal('kit' in none.facs[0], false, 'old kitten counts are dropped');
+});
+
+test('kittens earn XP by working and are promoted for points once the bar is full', () => {
+  const s = crewGame(1), k = s.crew[0];
+  assert.equal(G.kittenLevel(k), 1);
+  assert.equal(G.canPromote(k), false);
+  assert.equal(G.promoteKitten(s, 0), false, 'XP bar not full');
+  G.step(s, G.XP_BASE * 10);
+  assert.equal(k.xp, G.xpNeed(k), 'the bar stops at full');
+  const before = G.kittenBoost(s, k, 0);
+  s.pts = G.promoteCost(s, k) - 1;
+  assert.equal(G.promoteKitten(s, 0), false, 'too expensive');
+  s.pts = G.promoteCost(s, k);
+  assert.equal(G.promoteKitten(s, 0), true);
+  assert.equal(s.pts, 0);
+  assert.equal(k.lvl, 2);
+  assert.equal(k.xp, 0);
+  assert.ok(Math.abs(G.kittenBoost(s, k, 0) / before - G.LEVEL_STEP) < 1e-9);
+  assert.equal(G.xpNeed(k), G.XP_BASE * G.XP_GROW);
+  assert.ok(G.promoteCost(s, k) >= G.PROMO_MIN);
+});
+
+test('milestone levels double the kitten, and the favourite factory and underlings speed up XP', () => {
+  assert.ok(Math.abs(G.levelMult(5) / G.levelMult(4) - 2 * G.LEVEL_STEP) < 1e-9);
+  assert.ok(Math.abs(G.levelMult(4) / G.levelMult(3) - G.LEVEL_STEP) < 1e-9);
+  const k = { name: 'A', trait: 'hard', fav: 0, fac: 0, lvl: 1, xp: 0, subs: [] };
+  assert.equal(G.xpRate(k), G.XP_FAV);
+  assert.equal(G.xpRate({ ...k, fac: 1 }), 1);
+  assert.equal(G.xpRate({ ...k, fac: 1, subs: [{ name: 'Bit', trait: 'gear' }] }), 1 + G.SUB_XP);
+});
+
+test('underlings: slots open at levels 5/10/15 after 100M; matching traits and full teams add more', () => {
+  const s = crewGame(1), k = s.crew[0];
+  Object.assign(s.facs[0], { lines: 4, turbo: 5 });
+  k.lvl = 5;
+  assert.equal(G.slots(s, k), 0, 'not before 100M');
+  s.goalIdx = 3;
+  s.subRecruit = { name: 'Bit', trait: k.trait === 'gear' ? 'hard' : 'gear' };
+  assert.equal(G.slots(s, k), 1);
+  s.pts = 1e15;
+  const cost = G.subCost(s);
+  assert.equal(G.hireSub(s, 0), true);
+  assert.equal(s.pts, 1e15 - cost);
+  assert.ok(G.subCost(s) > cost, 'each one costs more');
+  assert.equal(G.hireSub(s, 0), false, 'no free slot');
+  assert.ok(Math.abs(G.teamMult(k) - (1 + G.SUB_BONUS)) < 1e-9);
+  k.subs = [0, 1, 2].map((i) => ({ name: 'S' + i, trait: k.trait }));
+  assert.ok(Math.abs(G.teamMult(k) - (1 + 3 * G.SUB_MATCH) * G.TEAM_BONUS) < 1e-9, 'a full matching team');
+  k.lvl = 15;
+  assert.equal(G.slots(s, k), 3);
+});
+
+test('promotions and underlings are priced from the crew\'s average output, so moving a kitten does not change them', () => {
+  const s = crewGame(3);
+  s.pts = 1e15;
+  G.hireKitten(s, 0);
+  for (const f of s.facs) Object.assign(f, { lines: 4, turbo: 5 });
+  G.syncCrew(s);
+  const k = s.crew[0];
+  const pace = G.crewPace(s), cost = G.promoteCost(s, k);
+  assert.ok(Math.abs(cost - Math.ceil(Math.max(G.PROMO_MIN, G.PROMO_SECONDS * pace))) <= 1);
+  G.moveKitten(s, 0, 1);
+  assert.ok(Math.abs(G.crewPace(s) - pace) / pace < 0.5, 'roughly the same crew output');
+  for (const c of G.CARE_STEPS) G.doCare(s, '2026-10-12', c);
+  G.catchYarn(s);
+  assert.ok(Math.abs(G.crewPace(s) - G.crewPace(Object.assign(structuredClone(s), { happy: 0, frenzy: 0 }))) < 1e-6, 'yarn and care time don\'t raise prices');
+  k.lvl = 3;
+  assert.ok(G.promoteCost(s, k) > G.promoteCost(s, { ...k, lvl: 1 }), 'higher levels cost a little more');
+});
+
+test('golden yarn: catching it makes all income ×5 for a minute', () => {
+  const s = rich(0);
+  s.own.auto = 10;
+  assert.equal(G.catchYarn(s), false, 'not before the cat');
+  s.cat = true;
+  const before = G.income(s), click = G.tapGain(s);
+  assert.equal(G.catchYarn(s), true);
+  assert.ok(Math.abs(G.income(s) - before * G.FRENZY_MULT) < 1e-9);
+  assert.ok(Math.abs(G.tapGain(s) - click * G.FRENZY_MULT) < 1e-9);
+  G.step(s, G.FRENZY_SECONDS);
+  G.step(s, 0.001);
+  assert.ok(Math.abs(G.income(s) - before) < 1e-9, 'over after a minute');
+});
+
+test('levels, XP, teams and the frenzy survive a save; bad team data is repaired', () => {
+  const s = crewGame(2);
+  s.pts = s.best = s.total = 1e15;
+  G.hireKitten(s, 0);
+  s.goalIdx = 3;
+  s.subRecruit = { name: 'Bit', trait: 'gear' };
+  s.crew[0].lvl = 6;
+  s.crew[0].xp = 12;
+  G.hireSub(s, 0);
+  G.catchYarn(s);
+  const back = G.deserialize(JSON.parse(JSON.stringify(G.serialize(s))));
+  assert.deepEqual(G.serialize(back), G.serialize(s));
+  const data = JSON.parse(JSON.stringify(G.serialize(s)));
+  data.crew[0].subs = [{ name: 'A', trait: 'gear' }, { name: 'B', trait: 'laser' }, { name: 'C', trait: 'hard' }];
+  data.crew[0].lvl = 6;
+  data.crew[0].xp = 1e9;
+  data.frenzy = 1e9;
+  const bad = G.deserialize(data);
+  assert.deepEqual(bad.crew[0].subs.map((u) => u.name), ['A'], 'unknown traits dropped, only as many as the level allows');
+  assert.equal(bad.crew[0].xp, G.xpNeed(bad.crew[0]), 'XP clamped to a full bar');
+  assert.equal(bad.frenzy, G.FRENZY_SECONDS);
+  assert.ok(!('gm' in G.serialize(s).facs[0]), 'derived values are not saved');
 });

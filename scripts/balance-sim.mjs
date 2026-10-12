@@ -1,5 +1,5 @@
 // Simulates a greedy player against the real rules in src/game.js, to tune prices.
-// Run: node scripts/balance-sim.mjs [--taps 5] [--collect 20] [--daily 1] [--worth 300] [--seed 1] [--trace]
+// Run: node scripts/balance-sim.mjs [--taps 5] [--collect 20] [--daily 1] [--yarn 480] [--worth 300] [--seed 1] [--trace] [--load SAVE.json]
 //   [--save-at 950000 --save-to test/presets/precat.json]  (--trace lists every purchase; --save-at writes the
 //   save the first time the balance reaches that many points, for play-testing from that point)
 //
@@ -7,8 +7,9 @@
 // and always buys whatever pays for itself fastest (price ÷ extra income), unless
 // saving for the current goal would be quicker and it takes longer than `worth` seconds to pay off. From 10M they keep every kitten in
 // the factory where it does the most, hire a kitten as soon as they can afford one, and (unless
-// --daily 0) do care time as soon as the crew arrives.
-import { writeFileSync } from 'node:fs';
+// --daily 0) do care time as soon as the crew arrives. After the cat they catch a golden yarn every
+// `yarn` seconds (0: never). Kitten promotions and underlings are bought like any other purchase.
+import { readFileSync, writeFileSync } from 'node:fs';
 import * as G from '../src/game.js';
 
 const arg = (name, d) => {
@@ -18,11 +19,12 @@ const arg = (name, d) => {
 const TRACE = process.argv.includes('--trace');
 // Like a real player, buys anything that pays for itself within WORTH seconds even when saving for the goal would be quicker.
 const WORTH = arg('worth', 300);
-const TAPS = arg('taps', 5), COLLECT = arg('collect', 20), DAILY = arg('daily', 1), LIMIT = 4 * 3600;
+const TAPS = arg('taps', 5), COLLECT = arg('collect', 20), DAILY = arg('daily', 1), YARN = arg('yarn', 480), LIMIT = arg('limit', 8 * 3600);
 const SAVE_AT = arg('save-at', 0), SAVE_TO = process.argv[process.argv.indexOf('--save-to') + 1];
+const LOAD = process.argv.includes('--load') ? process.argv[process.argv.indexOf('--load') + 1] : null;
 
 // What tapping earns per second on average, lucky clicks included.
-const tapIncome = (s) => TAPS * (G.perClick(s) * (1 + (G.LUCK_MULT - 1) * G.LUCK_CHANCE * s.own.luck) + G.powerGain(s));
+const tapIncome = (s) => TAPS * (G.perClick(s) * G.gainMult(s) * (1 + (G.LUCK_MULT - 1) * G.LUCK_CHANCE * s.own.luck) + G.powerGain(s));
 
 // Income the player actually gets per second, counting silos that fill before collection.
 function effectiveIncome(s) {
@@ -36,8 +38,8 @@ function effectiveIncome(s) {
 function shares(s) {
   G.syncCrew(s);
   const src = {
-    tap: tapIncome(s) + s.own.auto,
-    cat: G.catRate(s),
+    tap: tapIncome(s) + s.own.auto * G.gainMult(s),
+    cat: G.catRate(s) * G.gainMult(s),
     factories: s.facs.reduce((a, f) => a + (f.kitOn ? G.factoryRate(f) : Math.min(G.factoryRate(f), G.siloCap(f) / COLLECT)), 0)
   };
   const tot = src.tap + src.cat + src.factories;
@@ -73,6 +75,10 @@ function options(s) {
     o.push(bundle(s, 'factory+lines', [(t) => G.buildFactory(t) >= 0, ...Array.from({ length: lines.max - lines.min }, () => ext(i, 'lines')), topUpSilo(i)]));
   }
   if (G.crewOn(s)) s.facs.forEach((f, i) => { if (!G.kittenAt(s, i)) o.push(bundle(s, 'hire#' + (i + 1), [(t) => G.hireKitten(t, i)])); });
+  s.crew.forEach((k, n) => {
+    if (G.canPromote(k)) o.push(bundle(s, 'promote:' + k.name, [(t) => G.promoteKitten(t, n)]));
+    if (s.subRecruit && (k.subs || []).length < G.slots(s, k)) o.push(bundle(s, 'sub:' + k.name, [(t) => G.hireSub(t, n)]));
+  });
   s.facs.forEach((f, i) => {
     for (const e of G.EXTENSIONS) {
       if (G.extensionLocked(s, e) || G.extensionMaxed(f, e)) continue;
@@ -117,14 +123,16 @@ function arrange(s) {
   return best.filter((f, n) => f !== before[n]).length;
 }
 
-const s = G.newGame(), log = [], stats = { moves: 0, cares: 0 };
-s.seed = arg('seed', 1);
+// --load starts from a save (e.g. a preset) instead of a new game, at that save's level.
+const s = LOAD ? G.deserialize(JSON.parse(readFileSync(LOAD, 'utf8'))) : G.newGame(), log = [], stats = { moves: 0, cares: 0 };
+if (!LOAD) s.seed = arg('seed', 1);
 // Management effort per goal: collecting a silo or caring for a kitten each count as one action.
 const phases = G.GOALS.map(() => ({ actions: 0, gap: 0 }));
 let goalNow = 0;
 const phase = () => phases[goalNow];
 let t = 0, lastBuy = 0, SAVE_DONE = false;
 for (const [gi, goal] of G.GOALS.entries()) {
+  if (gi < s.goalIdx) continue; // a loaded save has already passed these
   const start = t;
   goalNow = gi;
   lastBuy = t; // reaching a goal counts as an event: the wait is measured within each goal
@@ -152,6 +160,7 @@ for (const [gi, goal] of G.GOALS.entries()) {
     G.step(s, 1);
     t++;
     if (t % COLLECT === 0) s.facs.forEach((f, i) => { if (!f.kitOn && G.collect(s, i) > 0) phase().actions++; });
+    if (YARN && s.cat && t % YARN === 0) G.catchYarn(s);
     if (DAILY && G.careReady(s, 'day 1')) {
       for (const c of G.CARE_STEPS) G.doCare(s, 'day 1', c);
       stats.cares++;
@@ -168,10 +177,10 @@ for (const [gi, goal] of G.GOALS.entries()) {
   log.push(`goal ${gi + 1} (${G.fmt(goal.at)}): ${mins.toFixed(1)} min, longest wait between purchases ${(p.gap / 60).toFixed(1)} min, ` +
     `${(p.actions / mins).toFixed(1)} management actions/min, income at the end ${shares(s)}, ${s.facs.length} factories`);
   if (gi === 0) G.adoptCat(s);
-  if (gi === 1) G.checkStoreUnlock(s);
+  if (gi >= 1) G.checkGoal(s);
 }
 console.log(`taps ${TAPS}/s, collect every ${COLLECT}s, ${DAILY ? 'does' : 'skips'} care time`);
 console.log(log.join('\n'));
-console.log(`crew after 10M: ${s.crew.map((k) => `${k.name} (${k.trait}, loves #${k.fav + 1}) at #${k.fac + 1} ×${G.kittenBoost(s, k, k.fac).toFixed(1)}`).join(', ')}; ` +
+console.log(`crew after 10M: ${s.crew.map((k) => `${k.name} L${G.kittenLevel(k)}+${(k.subs || []).length} (${k.trait}, loves #${k.fav + 1}) at #${k.fac + 1} ×${G.kittenBoost(s, k, k.fac).toFixed(1)}`).join(', ')}; ` +
   `${stats.moves} moves, care time ${stats.cares}×`);
 console.log('final:', JSON.stringify({ own: s.own, facs: s.facs.map(({ lines, turbo, silo, kit }) => [lines, turbo, silo, kit].join('')) }));
