@@ -316,6 +316,9 @@ export function doCare(s, today, step) {
 export const isFull = (f) => f.store >= siloCap(f);
 /** Everything the player earns per second if they keep the silos emptied. */
 export const income = (s) => perSec(s) + s.facs.reduce((a, f) => a + factoryRate(f), 0);
+/** What is being generated right now without tapping: the auto-clicker, the cat, and every factory that
+ *  is producing (kitten-run ones always; the others until their silo is full). */
+export const generating = (s) => perSec(s) + s.facs.reduce((a, f) => a + (f.kitOn || !isFull(f) ? factoryRate(f) : 0), 0);
 
 export function earn(s, g) {
   s.pts += g;

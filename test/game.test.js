@@ -68,6 +68,17 @@ test('fully upgraded, the first factory still makes a real share of all factory 
   assert.ok(rates[4] / total < 0.5, 'factory #5 is less than half');
 });
 
+test('the generation rate counts the auto-clicker, the cat and every factory still producing', () => {
+  const s = rich(1e6);
+  s.own.auto = 3;
+  G.buildFactory(s);
+  G.buildFactory(s);
+  const [a, b] = s.facs;
+  assert.equal(G.generating(s), 3 + G.factoryRate(a) + G.factoryRate(b));
+  a.store = G.siloCap(a);
+  assert.equal(G.generating(s), 3 + G.factoryRate(b), 'a full silo has stopped');
+});
+
 test('loading dock ships part of production straight to the balance', () => {
   const s = rich(0);
   s.facs.push(Object.assign(G.newFactory(0), { dock: 1 }));

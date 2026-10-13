@@ -197,7 +197,7 @@ function renderMain() {
   const s = state;
   set($('best'), 'text', G.fmt(s.best));
   // During a golden yarn frenzy the rate spot shows the frenzy instead (the header has no room for both).
-  set($('rate'), 'text', s.frenzy > 0 ? 'YARN ×' + G.FRENZY_MULT + ' · ' + Math.ceil(s.frenzy) + 's' : '+' + G.fmt(G.perSec(s)) + '/s');
+  set($('rate'), 'text', s.frenzy > 0 ? 'YARN ×' + G.FRENZY_MULT + ' · ' + Math.ceil(s.frenzy) + 's' : '+' + G.fmt(G.generating(s)) + '/s');
   set($('rate'), 'class', s.frenzy > 0 ? 'frenzy' : '');
   set($('pts'), 'text', G.fmt(s.pts));
   set($('pts'), 'class', 'num ' + (ui.taps ? (ui.taps % 2 ? 'bA' : 'bB') : ''));

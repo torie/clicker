@@ -26,7 +26,7 @@ Phone-first incremental clicker game, shipped as a PWA on GitHub Pages. Plain HT
 | `scripts/balance-sim.mjs` | Greedy-player simulation against the real rules. Run it after any price or rate change. |
 | `scripts/make-icons.mjs` | Regenerates `icons/*.png` (pixel "+1" button). |
 
-Checks: `npm test` (37 tests, all passing), `node scripts/balance-sim.mjs [--taps N --collect S --daily 0|1 --yarn S --worth S --seed N --limit S --trace --load SAVE --save-at N --save-to FILE]`, `npm start` then open http://localhost:8080 at phone size. `#reset` on the URL wipes the save.
+Checks: `npm test` (38 tests, all passing), `node scripts/balance-sim.mjs [--taps N --collect S --daily 0|1 --yarn S --worth S --seed N --limit S --trace --load SAVE --save-at N --save-to FILE]`, `npm start` then open http://localhost:8080 at phone size. `#reset` on the URL wipes the save.
 
 ## Game design (decided with the user)
 
