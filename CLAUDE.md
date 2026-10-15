@@ -27,7 +27,7 @@ Phone-first incremental clicker game, shipped as a PWA on GitHub Pages. Plain HT
 | `scripts/balance-sim.mjs` | Greedy-player simulation against the real rules. Run it after any price or rate change. |
 | `scripts/make-icons.mjs` | Regenerates `icons/*.png` (pixel "+1" button). |
 
-Checks: `npm test` (45 tests, all passing), `node scripts/balance-sim.mjs [--skins 0|1 --taps N --collect S --daily 0|1 --yarn S --worth S --seed N --limit S --trace --load SAVE --save-at N --save-to FILE]`, `npm start` then open http://localhost:8080 at phone size. `#reset` on the URL wipes the save.
+Checks: `npm test` (47 tests, all passing), `node scripts/balance-sim.mjs [--skins 0|1 --taps N --collect S --daily 0|1 --yarn S --worth S --seed N --limit S --trace --load SAVE --save-at N --save-to FILE]`, `npm start` then open http://localhost:8080 at phone size. `#reset` on the URL wipes the save.
 
 ## Game design (decided with the user)
 
@@ -86,6 +86,16 @@ Checks: `npm test` (45 tests, all passing), `node scripts/balance-sim.mjs [--ski
   - A kitten's levels 5, 10 and 15 open up to 3 slots. The next underling (name, trait) waits on the crew screen, and the player taps a free slot to hire it into that team. The price is 300 s of crew output, ×1.8 per underling hired.
   - Each underling adds +50% to its lead's factory, or +100% if it shares the lead's trait (★). Three matching make a ×1.5 team bonus. Each also gives the lead +50% XP. They need nothing.
   - **Art:** underlings are the kitten sprite with a yellow hard hat (`SUB_SVG`). They stand at the conveyor belts of their lead's factory, and appear in the team row of each kitten card.
+- **Night shift** (from 100M; built 2026-10-15, idea 1 in [docs/late-game-ideas.md](docs/late-game-ideas.md), to fill the empty hours-long timescale):
+  - Tap an underling in a kitten card's team row to open the sheet (`#shift`). It goes on a trip in real time: **the old silo 30 min (1 item), the catnip fields 2 h (2), the server room 8 h (4)** (`TRIPS`). The trip end is a wall-clock timestamp (`u.trip.back`), so it runs while the app is closed.
+  - While away **and until its loot is opened**, the underling doesn't work: no team bonus, no XP for its lead (`working()` in `game.js`). The sheet shows the factory's boost before → after.
+  - Loot (`LOOT`, weights per trip; longer trips find more blueprints):
+    - a crate of 15 min of income;
+    - a golden spool, a yarn ×5 frenzy whenever you want (header button `#use-spool`, at most 5, doesn't count as a catch);
+    - a treat that fills the lead's XP bar;
+    - a blueprint, a random factory ×1.1 for good (`f.bp`, multiplies `lineRate`).
+  - Alerts: the paw badge shows how many underlings are back, the crew strip says so, member chips flash "LOOT!", and the welcome-back toast counts them.
+  - Not modelled in `balance-sim.mjs` yet.
 - The user uses "levels" for these steps; the UI still says "GOAL n". Each level should end in a new stretch goal.
 - **Store** (`#screen-store`, opened from the amber bag icon in the header, next to the music button, so the goal meter stays visible). Tapping an item you don't own opens a **confirmation sheet** (`#confirm`: big preview, price, balance, ▶ preview for tracks, CANCEL / BUY). Nothing is bought without tapping BUY, and owned items switch with one tap:
   - **Cat skins (2026-10-15, the user's design):** 182 skins in six classes: **100 common, 50 rare, 20 epic, 8 mythic, 3 legendary, 1 broken legendary** (`CLASSES` in `src/wardrobe.js`).

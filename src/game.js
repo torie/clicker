@@ -106,6 +106,24 @@ export const TEAM_BONUS = 1.5;       // three matching underlings: ×1.5 more
 export const SUB_XP = 0.5;           // +50% XP for the lead per underling
 export const SUB_NAMES = ['Bit', 'Byte', 'Pip', 'Dot', 'Nib', 'Jot', 'Zip', 'Fig', 'Pea', 'Bun', 'Kip', 'Tad', 'Wink', 'Mote', 'Speck'];
 
+// Night shift (from 100M): an underling goes on a trip for real time and comes back with loot. While it's
+// away (until the player opens its loot) it doesn't work: no factory bonus, no XP for its lead.
+export const TRIPS = [
+  {id: 'silo', name: 'The old silo', secs: 1800, items: 1},
+  {id: 'fields', name: 'The catnip fields', secs: 7200, items: 2},
+  {id: 'server', name: 'The server room', secs: 28800, items: 4}
+];
+// Loot, with weights per trip (longer trips find more blueprints).
+export const LOOT = [
+  {id: 'crate', name: 'Crate of clicks', weights: [5, 4, 3]},
+  {id: 'spool', name: 'Golden spool', weights: [3, 3, 2]},
+  {id: 'blueprint', name: 'Blueprint', weights: [1, 2, 3]},
+  {id: 'treat', name: 'Treat', weights: [2, 2, 2]}
+];
+export const CRATE_SECS = 900;       // a crate holds 15 minutes of income
+export const BP_STEP = 1.1;          // each blueprint: its factory ×1.1 for good
+export const MAX_SPOOLS = 5;         // golden spools: a golden yarn frenzy whenever you like
+
 export const CARE_STEPS = ['feed', 'nap', 'play'];  // once a day, in any order
 export const HAPPY_MULT = 2;         // care time done: every kitten-run factory ×2...
 export const HAPPY_SECONDS = 3600;   // ...for an hour (time away counts too)
@@ -126,18 +144,18 @@ export const TRACKS = [
 
 export function newGame() {
   return {v: 1, pts: 0, best: 0, total: 0, own: {auto: 0, x2: 0, x4: 0, luck: 0, power: 0, train: 0}, facs: [], goalIdx: 0, cat: false,
-    storeOpen: false, crew: [], recruit: null, subRecruit: null, care: {day: '', done: []}, happy: 0, frenzy: 0, away: false,
+    storeOpen: false, crew: [], recruit: null, spools: 0, subRecruit: null, care: {day: '', done: []}, happy: 0, frenzy: 0, away: false,
     seed: Math.floor(Math.random() * 2 ** 31), rolls: 0, skins: ['classic'], skin: 'classic', tracks: ['silo'], track: 'silo', savedAt: Date.now(),
     stats: newStats(), feats: [], log: [], released: {classic: 0}, fresh: []};
 }
 
 // Counters behind the skin unlocks. `play` is seconds of active play; the *Run ones are current streaks.
 const STAT_KEYS = ['taps', 'lucky', 'play', 'collects', 'upg', 'ext', 'yarn', 'ftaps', 'care', 'happy', 'streak', 'streakMax',
-  'promos', 'moves', 'back', 'luckyRun', 'yarnRun', 'burst'];
+  'promos', 'moves', 'back', 'luckyRun', 'yarnRun', 'burst', 'trips'];
 const newStats = () => Object.fromEntries(STAT_KEYS.map((k) => [k, 0]));
 
 export function newFactory(i) {
-  return {i, lines: 1, turbo: 0, silo: 0, dock: 0, store: 0};
+  return {i, lines: 1, turbo: 0, silo: 0, dock: 0, store: 0, bp: 0};
 }
 
 export const cost = (item, level) => Math.ceil(item.base * Math.pow(item.grow, level));
@@ -152,7 +170,7 @@ export const catRate = (s) => catClicks(s) * perClick(s);
 export const levelBonus = (s) => Math.pow(LEVEL_BONUS, Math.max(0, s.goalIdx - 3));
 export const gainMult = (s) => levelBonus(s) * (s.frenzy > 0 ? FRENZY_MULT : 1) * (1 + skinBonus(s, 'all')) * (s.away ? 1 + skinBonus(s, 'away') : 1);
 export const perSec = (s) => (s.own.auto + catRate(s)) * gainMult(s);
-export const lineRate = (f) => LINE_RATE * Math.pow(TIER_OUT, f.i) * Math.pow(2, f.turbo);
+export const lineRate = (f) => LINE_RATE * Math.pow(TIER_OUT, f.i) * Math.pow(2, f.turbo) * Math.pow(BP_STEP, f.bp || 0);
 /** `kitOn` and `boost` are set by syncCrew while a kitten runs the factory; `gm` is gainMult. */
 export const factoryRate = (f) => f.lines * lineRate(f) * (f.kitOn ? f.boost : 1) * (f.gm || 1);
 export const siloCap = (f) => SILO_BASE * Math.pow(TIER_OUT, f.i) * Math.pow(2, f.silo);
@@ -174,12 +192,14 @@ export const promoteCost = (s, k) => Math.ceil(Math.max(PROMO_MIN, PROMO_SECONDS
 export const levelMult = (lvl) => Math.pow(LEVEL_STEP, lvl - 1) * Math.pow(2, Math.floor(lvl / MILESTONE_EVERY));
 export const slots = (s, k) => (underlingsOn(s) ? SLOT_LEVELS.filter((l) => kittenLevel(k) >= l).length : 0);
 const subs = (k) => k.subs || [];
+/** Underlings at work: the ones on a trip (or back with unopened loot) don't count. */
+const working = (k) => subs(k).filter((u) => !u.trip);
 export function teamMult(k) {
-  const t = subs(k), match = t.filter((u) => u.trait === k.trait).length;
+  const t = working(k), match = t.filter((u) => u.trait === k.trait).length;
   const m = 1 + t.reduce((a, u) => a + (u.trait === k.trait ? SUB_MATCH : SUB_BONUS), 0);
   return m * (match === SLOT_LEVELS.length ? TEAM_BONUS : 1);
 }
-export const xpRate = (k) => (k.fav === k.fac ? XP_FAV : 1) * (1 + SUB_XP * subs(k).length);
+export const xpRate = (k) => (k.fav === k.fac ? XP_FAV : 1) * (1 + SUB_XP * working(k).length);
 
 /** Average output of a kitten-run factory, without the yarn, care and level bonuses: the price unit for crew upgrades. */
 export function crewPace(s) {
@@ -283,6 +303,68 @@ export function hireSub(s, n) {
   k.subs = [...subs(k), {...s.subRecruit}];
   if (k.subs.length === SLOT_LEVELS.length && k.subs.every((u) => u.trait === k.trait)) markFeat(s, 'team');
   s.subRecruit = rollSub(s);
+  syncCrew(s);
+  return true;
+}
+
+// ---------- night shift ----------
+
+/** Seconds until underling u is back from its trip (0 when back; null when it isn't on one). */
+export const tripLeft = (u, now) => (u && u.trip ? Math.max(0, (u.trip.back - now) / 1000) : null);
+export const tripBack = (u, now) => tripLeft(u, now) === 0;
+/** Underlings back with loot, as [kitten index, slot] pairs. */
+export const tripsReady = (s, now) => s.crew.flatMap((k, n) => subs(k).map((u, j) => (tripBack(u, now) ? [n, j] : null)).filter(Boolean));
+
+/** Sends underling j of kitten n on trip t. */
+export function sendTrip(s, n, j, t, now) {
+  const k = s.crew[n], u = k && subs(k)[j];
+  if (!underlingsOn(s) || !u || u.trip || !TRIPS[t]) return false;
+  u.trip = {t, back: now + TRIPS[t].secs * 1000};
+  syncCrew(s);
+  return true;
+}
+
+function rollLoot(s, t) {
+  const total = LOOT.reduce((a, l) => a + l.weights[t], 0);
+  let r = rand(s) * total;
+  return LOOT.find((l) => (r -= l.weights[t]) < 0) || LOOT[0];
+}
+
+/** Opens the loot of underling j of kitten n once it's back; it goes back to work. Returns the loot, or null. */
+export function openTrip(s, n, j, now) {
+  const k = s.crew[n], u = k && subs(k)[j];
+  if (!tripBack(u, now)) return null;
+  const t = u.trip.t, out = [];
+  delete u.trip;
+  syncCrew(s);
+  for (let i = 0; i < TRIPS[t].items; i++) {
+    const l = rollLoot(s, t);
+    if (l.id === 'crate') {
+      const g = Math.ceil(CRATE_SECS * income(s) / (s.frenzy > 0 ? FRENZY_MULT : 1));
+      earn(s, g);
+      out.push({id: 'crate', text: 'CRATE OF CLICKS · +' + fmt(g)});
+    } else if (l.id === 'spool' && s.spools < MAX_SPOOLS) {
+      s.spools++;
+      out.push({id: 'spool', text: 'GOLDEN SPOOL · USE IT FOR A YARN ×' + FRENZY_MULT + ' ANY TIME'});
+    } else if (l.id === 'treat' || l.id === 'spool') { // spools are full: a treat instead
+      k.xp = xpNeed(k);
+      out.push({id: 'treat', text: 'TREAT · ' + k.name.toUpperCase() + '\'S XP BAR IS FULL'});
+    } else {
+      const f = s.facs[Math.floor(rand(s) * s.facs.length)];
+      f.bp = (f.bp || 0) + 1;
+      out.push({id: 'blueprint', text: 'BLUEPRINT · FACTORY #' + (f.i + 1) + ' ×' + BP_STEP + ' FOR GOOD'});
+    }
+  }
+  s.stats.trips++;
+  syncCrew(s);
+  return out;
+}
+
+/** Uses a golden spool: a golden yarn frenzy now (it doesn't count as a catch). */
+export function useSpool(s) {
+  if (!s.cat || s.spools < 1 || s.frenzy > 0) return false;
+  s.spools--;
+  s.frenzy = FRENZY_SECONDS * (1 + skinBonus(s, 'yarn'));
   syncCrew(s);
   return true;
 }
@@ -559,8 +641,14 @@ export function buySkin(s, id) {
   s.skins.push(id);
   return true;
 }
-// Play-test codes, entered in the store. 'yumi' unlocks every skin, for free.
+// Play-test codes, entered in the store. 'yumi' unlocks every skin, for free; 'wakeup' brings every
+// underling back from its night shift now.
 const CODES = {
+  wakeup: (s) => {
+    const away = s.crew.flatMap((k) => subs(k)).filter((u) => u.trip);
+    for (const u of away) u.trip.back = 0;
+    return away.length;
+  },
   yumi: (s) => {
     const ids = SKINS.map((sk) => sk.id).filter((id) => !s.skins.includes(id));
     for (const id of ids) {
@@ -613,9 +701,9 @@ export function applyOffline(s, seconds) {
 
 export function serialize(s) {
   return {v: 1, pts: s.pts, best: s.best, total: s.total, own: {...s.own}, facs: s.facs.map(({kitOn, boost, gm, ...f}) => f),
-    goalIdx: s.goalIdx, cat: s.cat, storeOpen: s.storeOpen, crew: s.crew.map((k) => ({...k, subs: subs(k).map((u) => ({...u}))})),
+    goalIdx: s.goalIdx, cat: s.cat, storeOpen: s.storeOpen, crew: s.crew.map((k) => ({...k, subs: subs(k).map((u) => ({...u, ...(u.trip && {trip: {...u.trip}})}))})),
     recruit: s.recruit && {...s.recruit}, subRecruit: s.subRecruit && {...s.subRecruit}, care: {day: s.care.day, done: [...s.care.done]},
-    happy: s.happy, frenzy: s.frenzy, seed: s.seed, rolls: s.rolls,
+    happy: s.happy, frenzy: s.frenzy, seed: s.seed, rolls: s.rolls, spools: s.spools,
     skins: [...s.skins], skin: s.skin,
     tracks: [...s.tracks], track: s.track, savedAt: s.savedAt,
     stats: {...s.stats}, feats: [...s.feats], log: [...s.log], released: {...s.released}, fresh: [...s.fresh]};
@@ -641,6 +729,7 @@ export function deserialize(data) {
     s.facs = data.facs.slice(0, MAX_FACTORIES).map((f, i) => { // kitOn is derived, never loaded
       const n = newFactory(i);
       for (const e of EXTENSIONS) n[e.id] = Math.max(e.min, int(f && f[e.id], e.max));
+      n.bp = int(f && f.bp, 1000);
       n.store = Math.min(num(f && f.store), siloCap(n));
       return n;
     });
@@ -663,8 +752,9 @@ export function deserialize(data) {
     };
     const saved = Array.isArray(data.crew) ? data.crew : [];
     s.crew = [];
+    const trip = (t) => (t && Number.isInteger(t.t) && TRIPS[t.t] && typeof t.back === 'number' && isFinite(t.back) ? {t: t.t, back: t.back} : null);
     const sub = (u) => (u && typeof u.name === 'string' && u.name && u.name.length <= 20 && TRAITS.some((t) => t.id === u.trait)
-      ? {name: u.name, trait: u.trait} : null);
+      ? {name: u.name, trait: u.trait, ...(trip(u.trip) && {trip: trip(u.trip)})} : null);
     for (const k of saved) {
       const fac = k && Number.isInteger(k.fac) ? k.fac : -1, n = kitten(k);
       if (!n || !s.facs[fac] || kittenAt(s, fac) || s.crew.some((x) => x.name === n.name)) continue;
@@ -683,6 +773,7 @@ export function deserialize(data) {
     }
     s.happy = Math.min(num(data.happy), HAPPY_SECONDS);
     if (underlingsOn(s)) s.subRecruit = sub(data.subRecruit) || rollSub(s);
+    if (s.subRecruit) delete s.subRecruit.trip;
     syncCrew(s);
   }
   const st = data.stats && typeof data.stats === 'object' ? data.stats : {};
@@ -701,7 +792,8 @@ export function deserialize(data) {
   s.fresh = (Array.isArray(data.fresh) ? data.fresh : []).filter((id) => skinReleased(s, id) && !s.skins.includes(id));
   s.tracks = ownedList(TRACKS, data.tracks);
   s.track = s.tracks.includes(data.track) ? data.track : TRACKS[0].id;
-  s.frenzy = s.cat ? Math.min(num(data.frenzy), FRENZY_SECONDS) : 0;
+  s.frenzy = s.cat ? Math.min(num(data.frenzy), FRENZY_SECONDS * (1 + skinBonus(s, 'yarn'))) : 0;
+  s.spools = s.cat ? int(data.spools, MAX_SPOOLS) : 0;
   s.savedAt = num(data.savedAt, Date.now());
   return s;
 }

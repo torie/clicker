@@ -612,8 +612,17 @@ svg.fx-err { animation: glitch 1.1s steps(1) infinite; }
 }
 .member .art { width: 24px; height: 24px; }
 .member .art svg { width: 100%; height: 100%; display: block; }
-.member.filled { border-style: solid; border-color: var(--amber); color: var(--amber); cursor: default; }
+.member.filled { border-style: solid; border-color: var(--amber); color: var(--amber); cursor: pointer; }
 .member.filled .art { animation: bob .5s steps(2) infinite; }
+.member.away { border-style: dashed; border-color: var(--rule-2); color: var(--faint); cursor: pointer; }
+.member.away .art { animation: none; opacity: .35; }
+.member.back { border-color: var(--alarm); color: var(--alarm); cursor: pointer; animation: alarmrow .8s steps(1) infinite; }
+.sub-art { color: var(--amber); }
+.sub-art svg { width: 80px; height: 80px; }
+.loot { display: flex; flex-direction: column; gap: 6px; }
+.loot .ln { padding: 10px 12px; border: 1px solid var(--amber); background: #1C1608; color: var(--amber); font-size: 12px; letter-spacing: .06em; opacity: 0; animation: type .01s linear forwards; }
+.spool-btn { position: relative; color: #FFD23F; border-color: #FFD23F; box-shadow: 0 0 12px rgba(255, 210, 63, .35); }
+.spool-btn:disabled { opacity: .45; box-shadow: none; }
 .member.free { border-color: var(--amber); color: var(--bright); cursor: pointer; }
 .member.free:disabled { color: var(--faint); cursor: default; }
 .member.free .art { opacity: .5; }

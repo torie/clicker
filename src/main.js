@@ -215,11 +215,12 @@ function renderMain() {
   set($('open-crew'), 'hidden', !crew);
   set($('crew-alert'), 'hidden', !crew);
   if (crew) {
-    const ready = G.careReady(s, today());
-    set($('crew-badge'), 'hidden', !ready);
-    set($('crew-badge'), 'text', '!');
-    set($('crew-alert'), 'class', 'crew-alert' + (ready || G.happy(s) ? ' ready' : ' calm'));
+    const ready = G.careReady(s, today()), loot = G.tripsReady(s, Date.now()).length;
+    set($('crew-badge'), 'hidden', !ready && !loot);
+    set($('crew-badge'), 'text', loot ? String(loot) : '!');
+    set($('crew-alert'), 'class', 'crew-alert' + (ready || loot || G.happy(s) ? ' ready' : ' calm'));
     set($('crew-alert-text'), 'text', ready ? 'CARE TIME IS READY · FACTORIES ×' + G.HAPPY_MULT + ' FOR AN HOUR'
+      : loot ? (loot === 1 ? 'AN UNDERLING IS' : loot + ' UNDERLINGS ARE') + ' BACK FROM THE NIGHT SHIFT WITH LOOT'
       : G.happy(s) ? 'HAPPY CREW · FACTORIES ×' + G.HAPPY_MULT + ' · ' + minutesLeft(s) + ' LEFT'
       : 'CREW OK · ' + s.crew.length + (s.crew.length === 1 ? ' KITTEN' : ' KITTENS') + ' WORKING');
   }
@@ -232,6 +233,9 @@ function renderMain() {
   set($('adopt'), 'hidden', !(reached && s.goalIdx === 0));
   set($('goal-done'), 'hidden', !done);
   set($('open-store'), 'hidden', !s.storeOpen);
+  set($('use-spool'), 'hidden', !s.spools);
+  set($('use-spool'), 'disabled', s.frenzy > 0);
+  set($('spool-badge'), 'text', String(s.spools));
   set($('store-badge'), 'hidden', !s.storeOpen || !s.fresh.length);
   set($('store-badge'), 'text', s.fresh.length > 99 ? '99' : String(s.fresh.length));
   set($('goal-title'), 'text', 'LEVEL ' + (Math.min(s.goalIdx, G.GOALS.length - 1) + 1) + ' · ' + goal.at.toLocaleString('en-US'));
@@ -411,7 +415,7 @@ function renderFactory() {
     const on = i < f.lines;
     set(b.el, 'class', 'bay' + (on ? '' : ' empty'));
     // The lead kitten is on the manager card; its underlings work at the belts.
-    const u = k && run && (k.subs || [])[i];
+    const u = k && run && (k.subs || []).filter((x) => !x.trip)[i];
     set(b.kit, 'hidden', !u);
     if (u) { set(b.kit, 'color', subColor(u)); set(b.kit, 'aria-label', u.name); }
     set(b.press, 'hidden', !on);
@@ -544,11 +548,11 @@ function syncKittenRows() {
     move.addEventListener('click', () => openMove(i));
     actions.append(promoteBtn, move);
     // The team: up to three underlings, a hire button for a free slot, or the level that opens the next one.
-    const team = h('div', 'team'), members = G.SLOT_LEVELS.map(() => {
+    const team = h('div', 'team'), members = G.SLOT_LEVELS.map((_, j) => {
       const m = h('button', 'member'), art = h('span', 'art'), label = h('span', 'label');
       art.innerHTML = SUB_SVG;
       m.append(art, label);
-      m.addEventListener('click', () => hireSub(i));
+      m.addEventListener('click', () => ((state.crew[i].subs || [])[j] ? openShift(i, j) : hireSub(i)));
       team.appendChild(m);
       return { m, art, label };
     });
@@ -587,9 +591,10 @@ function renderCrew() {
     set(btn, 'class', 'care' + (done ? '' : ' todo'));
   }
   set($('crew-note'), 'text', G.underlingsOn(s) && s.subRecruit
-    ? 'NEXT UNDERLING: ' + s.subRecruit.name.toUpperCase() + ' · ' + G.traitOf(s.subRecruit).name.toUpperCase() + '. ★ = same trait as the lead (+' + Math.round(G.SUB_MATCH * 100) + '% instead of +' + Math.round(G.SUB_BONUS * 100) + '%). Tap a free slot to hire.'
+    ? 'NEXT UNDERLING: ' + s.subRecruit.name.toUpperCase() + ' · ' + G.traitOf(s.subRecruit).name.toUpperCase() + '. ★ = same trait as the lead (+' + Math.round(G.SUB_MATCH * 100) + '% instead of +' + Math.round(G.SUB_BONUS * 100) + '%). Tap a free slot to hire. Tap an underling to send it on a NIGHT SHIFT: it comes back with loot.'
     : 'Each kitten works best in its favourite factory, and its trait decides where else it shines. MOVE swaps kittens around for free. Working fills the XP bar; when it\'s full, PROMOTE for points.');
   // Kittens
+  const now = Date.now();
   syncKittenRows();
   s.crew.forEach((k, i) => {
     const r = kittenRows[i], fav = k.fav === k.fac;
@@ -605,12 +610,12 @@ function renderCrew() {
     const on = G.underlingsOn(s), team = k.subs || [], open = G.slots(s, k), next = s.subRecruit, cost = G.subCost(s);
     set(r.team, 'hidden', !on);
     if (on) r.members.forEach((mb, j) => {
-      const u = team[j], free = !u && j < open && next;
-      set(mb.m, 'class', 'member' + (u ? ' filled' : free ? ' free' : ' locked'));
-      set(mb.m, 'disabled', !free || s.pts < cost);
+      const u = team[j], free = !u && j < open && next, left = G.tripLeft(u, now);
+      set(mb.m, 'class', 'member' + (u ? (left === null ? ' filled' : left > 0 ? ' away' : ' back') : free ? ' free' : ' locked'));
+      set(mb.m, 'disabled', !u && (!free || s.pts < cost));
       set(mb.art, 'hidden', !u && !free);
       if (u || free) set(mb.art, 'color', subColor(u || next));
-      set(mb.label, 'text', u ? u.name + (u.trait === k.trait ? ' ★' : '')
+      set(mb.label, 'text', u ? u.name + (u.trait === k.trait ? ' ★' : '') + (left === null ? '' : left > 0 ? ' · ' + fmtLeft(left) : ' · LOOT!')
         : free ? 'HIRE ' + next.name.toUpperCase() + (next.trait === k.trait ? ' ★' : '') + ' · ' + G.fmt(cost)
         : 'SLOT AT LV ' + G.SLOT_LEVELS[j]);
     });
@@ -676,6 +681,89 @@ function closeMove() {
 }
 $('move-cancel').addEventListener('click', closeMove);
 
+// Night shift: send an underling on a trip, watch the clock, open the loot.
+ui.shift = null; // {n, j, loot}
+const fmtLeft = (sec) => (sec >= 3600 ? Math.floor(sec / 3600) + 'h ' + Math.floor((sec % 3600) / 60) + 'm' : sec >= 60 ? Math.ceil(sec / 60) + 'm' : Math.ceil(sec) + 's');
+function openShift(n, j) {
+  ui.shift = { n, j, loot: null };
+  $('shift-art').innerHTML = SUB_SVG;
+  $('shift-art').style.color = subColor(state.crew[n].subs[j]);
+  $('shift-loot').hidden = true;
+  $('shift-loot').textContent = '';
+  const rows = $('shift-rows');
+  rows.textContent = '';
+  G.TRIPS.forEach((t, i) => {
+    const r = makeRow(() => sendShift(i));
+    const hrs = t.secs / 3600;
+    setRow(r, { cls: 'ok', nm: t.name, price: hrs < 1 ? t.secs / 60 + ' MIN' : hrs + ' H',
+      ds: 'Brings back ' + (t.items === 1 ? 'one thing' : t.items + ' things') + (i === 2 ? ' · best odds of blueprints' : ''), bar: '' });
+    rows.appendChild(r.el);
+  });
+  $('shift').hidden = false;
+  renderShift();
+  $('shift-cancel').focus({ preventScroll: true });
+}
+function renderShift() {
+  if (!ui.shift) return;
+  const { n, j, loot } = ui.shift, k = state.crew[n], u = k && (k.subs || [])[j];
+  if (!u) { closeShift(); return; }
+  const left = G.tripLeft(u, Date.now()), name = u.name.toUpperCase();
+  set($('shift-rows'), 'hidden', left !== null || !!loot);
+  set($('shift-open'), 'hidden', !loot && left !== 0);
+  set($('shift-open'), 'text', loot ? 'BACK TO WORK' : 'OPEN THE LOOT');
+  set($('shift-actions'), 'class', 'sheet-actions' + (loot || left !== 0 ? ' one' : ''));
+  set($('shift-cancel'), 'hidden', !!loot);
+  if (loot) {
+    set($('shift-title'), 'text', name + ' FOUND');
+    set($('shift-desc'), 'text', name + ' is back at the belts in ' + k.name + '\'s factory.');
+  } else if (left === null) {
+    set($('shift-title'), 'text', 'NIGHT SHIFT FOR ' + name);
+    const away = { ...k, subs: k.subs.map((x) => (x === u ? { ...x, trip: {} } : x)) };
+    set($('shift-desc'), 'text', 'Pick a trip. While ' + u.name + ' is away, ' + k.name + '\'s factory runs ' + fmtBoost(G.kittenBoost(state, k, k.fac)) +
+      ' → ' + fmtBoost(G.kittenBoost(state, away, k.fac)) + '. The loot waits for you when ' + u.name + ' is back.');
+  } else if (left > 0) {
+    set($('shift-title'), 'text', name + ' IS AWAY');
+    set($('shift-desc'), 'text', 'At ' + G.TRIPS[u.trip.t].name.toLowerCase() + '. Back in ' + fmtLeft(left) + '.');
+  } else {
+    set($('shift-title'), 'text', name + ' IS BACK!');
+    set($('shift-desc'), 'text', 'Back from ' + G.TRIPS[u.trip.t].name.toLowerCase() + ' with something in its paws.');
+  }
+}
+function sendShift(t) {
+  const { n, j } = ui.shift;
+  if (!G.sendTrip(state, n, j, t, Date.now())) return;
+  showToast(state.crew[n].subs[j].name.toUpperCase() + ' LEFT FOR ' + G.TRIPS[t].name.toUpperCase());
+  save();
+  closeShift();
+}
+$('shift-open').addEventListener('click', () => {
+  if (!ui.shift) return;
+  if (ui.shift.loot) { closeShift(); return; }
+  const loot = G.openTrip(state, ui.shift.n, ui.shift.j, Date.now());
+  if (!loot) return;
+  ui.shift.loot = loot;
+  const box = $('shift-loot');
+  box.textContent = '';
+  loot.forEach((l, i) => { const ln = h('div', 'ln', '> ' + l.text); ln.style.animationDelay = (0.3 + i * 0.5) + 's'; box.appendChild(ln); });
+  box.hidden = false;
+  save();
+  renderShift();
+});
+function closeShift() {
+  ui.shift = null;
+  $('shift').hidden = true;
+  render();
+}
+$('shift-cancel').addEventListener('click', closeShift);
+$('shift').addEventListener('click', (e) => { if (e.target === $('shift')) closeShift(); });
+
+$('use-spool').addEventListener('click', () => {
+  if (!G.useSpool(state)) return;
+  showToast('GOLDEN SPOOL · ALL INCOME ×' + G.FRENZY_MULT + ' FOR ' + Math.round(state.frenzy) + 's');
+  save();
+  render();
+});
+
 // Play: catch the yarn ball a few times (one of the care time steps).
 const PLAY_CATCHES = 5;
 function moveYarn() {
@@ -725,6 +813,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   if (!$('play').hidden) closePlay();
   else if (!$('move').hidden) closeMove();
+  else if (!$('shift').hidden) closeShift();
   else if (!$('lesson').hidden) { $('lesson').hidden = true; render(); }
 });
 
@@ -813,9 +902,10 @@ const trackRows = G.TRACKS.map((tr) => {
 $('code-form').addEventListener('submit', (e) => {
   e.preventDefault();
   const input = $('code-input'), n = G.redeemCode(state, input.value);
+  input.dataset.code = input.value.trim().toLowerCase();
   input.value = '';
   input.blur();
-  showToast(n < 0 ? 'UNKNOWN CODE' : n === 0 ? 'CODE OK · NOTHING NEW TO UNLOCK' : 'CODE OK · ' + n + ' SKINS UNLOCKED');
+  showToast(n < 0 ? 'UNKNOWN CODE' : n === 0 ? 'CODE OK · NOTHING NEW TO UNLOCK' : 'CODE OK · ' + n + (input.dataset.code === 'wakeup' ? ' UNDERLINGS BACK' : ' SKINS UNLOCKED'));
   if (n > 0) { ui.freshSeen = state.fresh.length; save(); }
   render();
 });
@@ -1026,7 +1116,7 @@ const YARN_MIN = 360, YARN_MAX = 600, YARN_ROLL_MS = 7000;
 ui.yarnIn = YARN_MIN + Math.random() * (YARN_MAX - YARN_MIN);
 function tickYarn(dt) {
   const yarn = $('gold-yarn');
-  const quiet = $('boot').hidden && $('lesson').hidden && $('confirm').hidden && $('play').hidden && $('move').hidden;
+  const quiet = $('boot').hidden && $('lesson').hidden && $('confirm').hidden && $('play').hidden && $('move').hidden && $('shift').hidden;
   if (!state.cat || document.hidden || !yarn.hidden || !quiet || ui.view === 'store') return;
   ui.yarnIn -= dt;
   if (ui.yarnIn > 0) return;
@@ -1073,6 +1163,7 @@ function render() {
   if (reached > 2) showToast('LEVEL ' + (reached + 1) + ' REACHED · ALL INCOME +' + Math.round((G.LEVEL_BONUS - 1) * 100) + '%');
   maybeShowIntro();
   if (ui.view === 'crew') renderCrew();
+  renderShift();
   if (ui.view === 'factory') renderFactory();
   if (ui.view === 'store') renderStore();
   if (ui.view === 'main') renderMain();
@@ -1104,6 +1195,8 @@ if (welcome && (welcome.points >= 1 || welcome.stored >= 1)) {
   const parts = [];
   if (welcome.points >= 1) parts.push('+' + G.fmt(welcome.points) + ' EARNED');
   if (welcome.stored >= 1) parts.push('+' + G.fmt(welcome.stored) + ' IN YOUR SILOS');
+  const back = G.tripsReady(state, Date.now()).length;
+  if (back) parts.push(back + ' BACK FROM THE NIGHT SHIFT');
   showToast('WELCOME BACK · ' + parts.join(' · '));
 }
 

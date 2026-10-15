@@ -246,6 +246,49 @@ test('care streaks count days in a row', () => {
   assert.equal(s.stats.happy, 4);
 });
 
+test('night shift: an underling on a trip stops working until its loot is opened', () => {
+  const s = rich(1e12);
+  for (let i = 0; i < 5; i++) G.buildFactory(s);
+  Object.assign(s, { cat: true, goalIdx: 1 });
+  G.checkGoal(Object.assign(s, { pts: 1e12 }));
+  G.checkGoal(s); // 100M: underlings
+  const k = s.crew[0];
+  k.lvl = 15;
+  k.subs = [{ name: 'Bit', trait: k.trait }];
+  G.syncCrew(s);
+  const withSub = G.kittenBoost(s, k, k.fac);
+  assert.equal(G.sendTrip(s, 0, 0, 1, 1000), true);
+  assert.equal(G.sendTrip(s, 0, 0, 1, 1000), false, 'already away');
+  assert.ok(G.kittenBoost(s, k, k.fac) < withSub, 'its bonus is gone while away');
+  assert.equal(G.tripLeft(k.subs[0], 1000), 7200);
+  assert.equal(G.openTrip(s, 0, 0, 1000 + 7199e3), null, 'not back yet');
+  const early = structuredClone(s);
+  assert.equal(G.redeemCode(early, 'wakeup'), 1);
+  assert.ok(G.tripBack(early.crew[0].subs[0], 1000), 'the wakeup code brings it back now');
+  assert.deepEqual(G.tripsReady(s, 1000 + 7200e3), [[0, 0]]);
+  const saved = G.deserialize(JSON.parse(JSON.stringify(G.serialize(s))));
+  assert.deepEqual(saved.crew[0].subs[0].trip, k.subs[0].trip, 'trips survive a save');
+  const loot = G.openTrip(s, 0, 0, 1000 + 7200e3);
+  assert.equal(loot.length, 2, 'the catnip fields bring back two things');
+  assert.equal(k.subs[0].trip, undefined);
+  assert.equal(G.kittenBoost(s, k, k.fac) >= withSub, true, 'back at work');
+  assert.equal(s.stats.trips, 1);
+});
+
+test('loot: blueprints speed a factory up for good, spools start a frenzy on demand', () => {
+  const s = rich(1e6);
+  G.buildFactory(s);
+  const f = s.facs[0], r = G.factoryRate(f);
+  f.bp = 2;
+  assert.ok(Math.abs(G.factoryRate(f) / r - G.BP_STEP ** 2) < 1e-9);
+  assert.equal(G.useSpool(s), false, 'no cat, no spool');
+  Object.assign(s, { cat: true, spools: 1 });
+  assert.equal(G.useSpool(s), true);
+  assert.equal(s.frenzy, G.FRENZY_SECONDS);
+  assert.equal(s.spools, 0);
+  assert.equal(s.stats.yarn, 0, 'a spool is not a catch');
+});
+
 test('the code yumi unlocks every skin; unknown codes do nothing', () => {
   const s = rich(0);
   assert.equal(G.redeemCode(s, 'nope'), -1);
