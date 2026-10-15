@@ -289,6 +289,39 @@ test('loot: blueprints speed a factory up for good, spools start a frenzy on dem
   assert.equal(s.stats.yarn, 0, 'a spool is not a catch');
 });
 
+test('boxes: bigger boxes cost less per item, open into items that apply right away', () => {
+  const per = G.BOXES.map((b) => G.boxSecs(b) / b.items / b.odds.reduce((a, p, c) => a + p * G.PART_VALUE[c], 0));
+  for (let i = 1; i < per.length; i++) assert.ok(per[i] < per[i - 1], G.BOXES[i].id + ' is better value');
+  const s = rich(1e15);
+  G.buildFactory(s);
+  assert.equal(G.buyBox(s, 0), null, 'store closed');
+  Object.assign(s, { cat: true, goalIdx: 2, storeOpen: true });
+  const before = s.pts, price = G.boxPrice(s, 3);
+  const items = G.buyBox(s, 3);
+  assert.equal(items.length, 8);
+  assert.ok(items.every((it, i) => i === 0 || it.cls <= items[i - 1].cls), 'best first');
+  assert.ok(items.every((it) => it.cls >= 1), 'a golden chest has no commons');
+  assert.ok(s.pts >= before - price - 1, 'paid (crates may pay some back)');
+  assert.equal(s.stats.boxes, 1);
+  for (let i = 0; i < 30; i++) G.buyBox(s, 2);
+  const kinds = new Set();
+  for (let i = 0; i < 40; i++) G.buyBox(s, 1).forEach((it) => kinds.add(it.kind));
+  assert.ok(kinds.has('part') && kinds.has('skin') && kinds.has('crate'), [...kinds].join());
+  assert.ok(Object.values(s.parts).some((v) => v > 0));
+  const t = G.deserialize(JSON.parse(JSON.stringify(G.serialize(s))));
+  assert.deepEqual(t.parts, s.parts, 'upgrades survive a save');
+});
+
+test('box upgrades add to the worn skin bonus', () => {
+  const s = rich(0);
+  const plain = G.tapGain(s);
+  s.parts.tap = 0.1;
+  assert.ok(Math.abs(G.tapGain(s) / plain - 1.1) < 1e-9);
+  s.skins.push('ginger');
+  G.equipSkin(s, 'ginger');
+  assert.ok(Math.abs(G.tapGain(s) / plain - 1.15) < 1e-9);
+});
+
 test('the code yumi unlocks every skin; unknown codes do nothing', () => {
   const s = rich(0);
   assert.equal(G.redeemCode(s, 'nope'), -1);

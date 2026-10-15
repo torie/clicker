@@ -144,14 +144,14 @@ export const TRACKS = [
 
 export function newGame() {
   return {v: 1, pts: 0, best: 0, total: 0, own: {auto: 0, x2: 0, x4: 0, luck: 0, power: 0, train: 0}, facs: [], goalIdx: 0, cat: false,
-    storeOpen: false, crew: [], recruit: null, spools: 0, subRecruit: null, care: {day: '', done: []}, happy: 0, frenzy: 0, away: false,
+    storeOpen: false, crew: [], recruit: null, spools: 0, parts: {}, subRecruit: null, care: {day: '', done: []}, happy: 0, frenzy: 0, away: false,
     seed: Math.floor(Math.random() * 2 ** 31), rolls: 0, skins: ['classic'], skin: 'classic', tracks: ['silo'], track: 'silo', savedAt: Date.now(),
     stats: newStats(), feats: [], log: [], released: {classic: 0}, fresh: []};
 }
 
 // Counters behind the skin unlocks. `play` is seconds of active play; the *Run ones are current streaks.
 const STAT_KEYS = ['taps', 'lucky', 'play', 'collects', 'upg', 'ext', 'yarn', 'ftaps', 'care', 'happy', 'streak', 'streakMax',
-  'promos', 'moves', 'back', 'luckyRun', 'yarnRun', 'burst', 'trips'];
+  'promos', 'moves', 'back', 'luckyRun', 'yarnRun', 'burst', 'trips', 'boxes'];
 const newStats = () => Object.fromEntries(STAT_KEYS.map((k) => [k, 0]));
 
 export function newFactory(i) {
@@ -163,12 +163,12 @@ export const upgradeCost = (s, u) => cost(u, s.own[u.id]);
 export const extensionCost = (e, f) => Math.ceil(cost(e, f[e.id] - e.min) * Math.pow(TIER_COST, f.i));
 
 export const perClick = (s) => Math.pow(2, s.own.x2) * Math.pow(4, s.own.x4);
-export const catClicks = (s) => (s.cat ? (CAT_CPS + CAT_TRAIN * s.own.train) * (1 + 0.25 * crewTrait(s, 'pal')) * (1 + skinBonus(s, 'cat')) : 0);
+export const catClicks = (s) => (s.cat ? (CAT_CPS + CAT_TRAIN * s.own.train) * (1 + 0.25 * crewTrait(s, 'pal')) * (1 + bonus(s, 'cat')) : 0);
 /** The cat's clicks are plain clicks: Power tap only works for the player's own taps. */
 export const catRate = (s) => catClicks(s) * perClick(s);
 /** Everything earned is multiplied by the level bonus and, while it lasts, the golden yarn frenzy. */
 export const levelBonus = (s) => Math.pow(LEVEL_BONUS, Math.max(0, s.goalIdx - 3));
-export const gainMult = (s) => levelBonus(s) * (s.frenzy > 0 ? FRENZY_MULT : 1) * (1 + skinBonus(s, 'all')) * (s.away ? 1 + skinBonus(s, 'away') : 1);
+export const gainMult = (s) => levelBonus(s) * (s.frenzy > 0 ? FRENZY_MULT : 1) * (1 + bonus(s, 'all')) * (s.away ? 1 + bonus(s, 'away') : 1);
 export const perSec = (s) => (s.own.auto + catRate(s)) * gainMult(s);
 export const lineRate = (f) => LINE_RATE * Math.pow(TIER_OUT, f.i) * Math.pow(2, f.turbo) * Math.pow(BP_STEP, f.bp || 0);
 /** `kitOn` and `boost` are set by syncCrew while a kitten runs the factory; `gm` is gainMult. */
@@ -230,7 +230,7 @@ export function syncCrew(s) {
     const k = crewOn(s) && kittenAt(s, i);
     f.kitOn = k ? true : undefined;
     f.boost = k ? kittenBoost(s, k, i) : undefined;
-    f.gm = gm * (1 + skinBonus(s, 'factory'));
+    f.gm = gm * (1 + bonus(s, 'factory'));
   });
 }
 
@@ -283,7 +283,7 @@ export function promoteKitten(s, n) {
 
 /** Fills every kitten's XP bar (it stops at full until the kitten is promoted). */
 function tickXp(s, dt) {
-  const m = 1 + skinBonus(s, 'xp');
+  const m = 1 + bonus(s, 'xp');
   for (const k of s.crew) k.xp = Math.min(xpNeed(k), (k.xp || 0) + xpRate(k) * m * dt);
 }
 
@@ -364,7 +364,7 @@ export function openTrip(s, n, j, now) {
 export function useSpool(s) {
   if (!s.cat || s.spools < 1 || s.frenzy > 0) return false;
   s.spools--;
-  s.frenzy = FRENZY_SECONDS * (1 + skinBonus(s, 'yarn'));
+  s.frenzy = FRENZY_SECONDS * (1 + bonus(s, 'yarn'));
   syncCrew(s);
   return true;
 }
@@ -372,7 +372,7 @@ export function useSpool(s) {
 /** Catching the golden yarn: all income ×FRENZY_MULT for FRENZY_SECONDS. */
 export function catchYarn(s) {
   if (!s.cat) return false;
-  s.frenzy = FRENZY_SECONDS * (1 + skinBonus(s, 'yarn'));
+  s.frenzy = FRENZY_SECONDS * (1 + bonus(s, 'yarn'));
   s.stats.yarn++;
   s.stats.burst = 0;
   if (++s.stats.yarnRun >= 10) markFeat(s, 'yarn10');
@@ -463,9 +463,9 @@ export function step(s, dt) {
 
 /** Power tap's part of every tap: a share of the income per second. Lucky clicks don't multiply it. */
 export const powerGain = (s) => s.own.power * POWER_SHARE * income(s);
-export const tapMult = (s) => 1 + skinBonus(s, 'tap');
+export const tapMult = (s) => 1 + bonus(s, 'tap');
 export const tapGain = (s) => (perClick(s) * gainMult(s) + powerGain(s)) * tapMult(s);
-export const luckMult = (s) => LUCK_MULT * (1 + skinBonus(s, 'luck'));
+export const luckMult = (s) => LUCK_MULT * (1 + bonus(s, 'luck'));
 
 export function tap(s, rng = Math.random) {
   const lucky = rng() < LUCK_CHANCE * s.own.luck;
@@ -573,6 +573,9 @@ export const finalGoalReached = (s) => s.goalIdx >= GOALS.length;
 
 // ---------- skins ----------
 
+/** Everything boosting one thing: the worn skin plus the upgrades found in boxes (0.25 = +25%). */
+export const bonus = (s, type) => skinBonus(s, type) + (s.parts[type] || 0);
+
 /** The worn skin's bonus of one type (0.25 = +25%). */
 export function skinBonus(s, type) {
   const sk = skinById.get(s.skin);
@@ -641,6 +644,91 @@ export function buySkin(s, id) {
   s.skins.push(id);
   return true;
 }
+// ---------- boxes ----------
+// Boxes are sold in the store for points. Each holds a few items, and each item has a class (common to
+// legendary, as skins) that sets how good it is. Bigger boxes hold more items with better odds, and cost
+// less per item's worth (`discount`). Prices are seconds of income, like promotions, so a box stays worth
+// opening at every stage.
+export const BOXES = [
+  {id: 'cardboard', name: 'Cardboard box', items: 1, odds: [70, 25, 5, 0, 0], discount: 1},
+  {id: 'wooden', name: 'Wooden crate', items: 3, odds: [45, 38, 14, 3, 0], discount: 0.85},
+  {id: 'iron', name: 'Iron chest', items: 5, odds: [20, 45, 25, 9, 1], discount: 0.7},
+  {id: 'golden', name: 'Golden chest', items: 8, odds: [0, 30, 45, 20, 5], discount: 0.55}
+];
+// What an item can be, with weights, and how big it is per class [common, rare, epic, mythic, legendary].
+export const BOX_ITEMS = [
+  {id: 'part', weight: 50},       // an upgrade: a permanent bonus to one thing (taps, cat, factories...)
+  {id: 'skin', weight: 20},       // a skin of that class you don't own yet, even one not released yet
+  {id: 'crate', weight: 15},      // minutes of income
+  {id: 'spool', weight: 10},      // golden spools
+  {id: 'blueprint', weight: 5}    // blueprints for a random factory
+];
+export const PART_VALUE = [0.02, 0.05, 0.1, 0.25, 0.5];
+export const CRATE_MINUTES = [1, 3, 6, 12, 24];   // kept small, so crates never pay a box back on their own
+export const ITEM_COUNT = [1, 1, 2, 3, 5];     // spools or blueprints per item
+const PART_TYPES = Object.keys(BONUSES);
+const SECS_PER_PART = 38;                       // a cardboard box (+3% on average) costs about 2 minutes of income
+/** A box's price: its expected upgrade value in seconds of income, with the bigger boxes' discount. */
+export function boxSecs(b) {
+  const ev = b.odds.reduce((a, p, c) => a + p / 100 * PART_VALUE[c] * 100, 0);
+  return Math.round(ev * b.items * SECS_PER_PART * b.discount);
+}
+export function boxPrice(s, i) {
+  const p = Math.max(1e5, boxSecs(BOXES[i]) * income(s) / (s.frenzy > 0 ? FRENZY_MULT : 1));
+  const mag = Math.pow(10, Math.floor(Math.log10(p)) - 1);
+  return Math.ceil(p / mag) * mag;
+}
+
+function rollWeighted(s, weights) {
+  let r = rand(s) * weights.reduce((a, w) => a + w, 0);
+  return Math.max(0, weights.findIndex((w) => (r -= w) < 0));
+}
+/** One item of class c, applied to the state. Returns {cls, kind, text}. */
+function boxItem(s, c) {
+  let kind = BOX_ITEMS[rollWeighted(s, BOX_ITEMS.map((x) => x.weight))].id;
+  const skins = SKINS.filter((sk) => sk.cls === c && !s.skins.includes(sk.id) && !sk.secret);
+  if (kind === 'skin' && !skins.length) kind = 'part';
+  if (kind === 'spool' && (!s.cat || s.spools >= MAX_SPOOLS)) kind = 'crate';
+  if (kind === 'blueprint' && !s.facs.length) kind = 'crate';
+  if (kind === 'skin') {
+    const sk = skins[Math.floor(rand(s) * skins.length)];
+    if (!skinReleased(s, sk.id)) s.released[sk.id] = 0;
+    s.skins.push(sk.id);
+    return {cls: c, kind, id: sk.id, text: 'SKIN · ' + sk.name.toUpperCase()};
+  }
+  if (kind === 'part') {
+    const type = PART_TYPES[Math.floor(rand(s) * PART_TYPES.length)], v = PART_VALUE[c] * (BONUSES[type].half ? 0.5 : 1);
+    s.parts[type] = (s.parts[type] || 0) + v;
+    return {cls: c, kind, text: 'UPGRADE · +' + +(v * 100).toFixed(1) + '% ' + BONUSES[type].label.toUpperCase() + ' FOR GOOD'};
+  }
+  if (kind === 'spool') {
+    const n = Math.min(ITEM_COUNT[c], MAX_SPOOLS - s.spools);
+    s.spools += n;
+    return {cls: c, kind, text: (n === 1 ? 'A GOLDEN SPOOL' : n + ' GOLDEN SPOOLS') + ' · YARN ×' + FRENZY_MULT + ' WHEN YOU LIKE'};
+  }
+  if (kind === 'blueprint') {
+    const f = s.facs[Math.floor(rand(s) * s.facs.length)];
+    f.bp = (f.bp || 0) + ITEM_COUNT[c];
+    return {cls: c, kind, text: (ITEM_COUNT[c] === 1 ? 'BLUEPRINT' : ITEM_COUNT[c] + ' BLUEPRINTS') + ' · FACTORY #' + (f.i + 1) + ' ×' + +Math.pow(BP_STEP, ITEM_COUNT[c]).toFixed(2) + ' FOR GOOD'};
+  }
+  const g = Math.ceil(CRATE_MINUTES[c] * 60 * income(s) / (s.frenzy > 0 ? FRENZY_MULT : 1));
+  earn(s, g);
+  return {cls: c, kind: 'crate', text: CRATE_MINUTES[c] + ' MIN OF CLICKS · +' + fmt(g)};
+}
+/** Buys and opens box i. Returns its items, best first, or null. */
+export function buyBox(s, i) {
+  const b = BOXES[i];
+  if (!s.storeOpen || !b) return null;
+  const price = boxPrice(s, i);
+  if (s.pts < price) return null;
+  s.pts -= price;
+  const out = [];
+  for (let n = 0; n < b.items; n++) out.push(boxItem(s, rollWeighted(s, b.odds)));
+  s.stats.boxes++;
+  syncCrew(s);
+  return out.sort((a, z) => z.cls - a.cls);
+}
+
 // Play-test codes, entered in the store. 'yumi' unlocks every skin, for free; 'wakeup' brings every
 // underling back from its night shift now.
 const CODES = {
@@ -703,7 +791,7 @@ export function serialize(s) {
   return {v: 1, pts: s.pts, best: s.best, total: s.total, own: {...s.own}, facs: s.facs.map(({kitOn, boost, gm, ...f}) => f),
     goalIdx: s.goalIdx, cat: s.cat, storeOpen: s.storeOpen, crew: s.crew.map((k) => ({...k, subs: subs(k).map((u) => ({...u, ...(u.trip && {trip: {...u.trip}})}))})),
     recruit: s.recruit && {...s.recruit}, subRecruit: s.subRecruit && {...s.subRecruit}, care: {day: s.care.day, done: [...s.care.done]},
-    happy: s.happy, frenzy: s.frenzy, seed: s.seed, rolls: s.rolls, spools: s.spools,
+    happy: s.happy, frenzy: s.frenzy, seed: s.seed, rolls: s.rolls, spools: s.spools, parts: {...s.parts},
     skins: [...s.skins], skin: s.skin,
     tracks: [...s.tracks], track: s.track, savedAt: s.savedAt,
     stats: {...s.stats}, feats: [...s.feats], log: [...s.log], released: {...s.released}, fresh: [...s.fresh]};
@@ -776,6 +864,8 @@ export function deserialize(data) {
     if (s.subRecruit) delete s.subRecruit.trip;
     syncCrew(s);
   }
+  const parts = data.parts && typeof data.parts === 'object' ? data.parts : {};
+  for (const k of Object.keys(BONUSES)) if (num(parts[k]) > 0) s.parts[k] = Math.min(num(parts[k]), 1e4);
   const st = data.stats && typeof data.stats === 'object' ? data.stats : {};
   for (const k of STAT_KEYS) s.stats[k] = num(st[k]);
   const feats = new Set(Array.isArray(data.feats) ? data.feats : []);
@@ -792,7 +882,7 @@ export function deserialize(data) {
   s.fresh = (Array.isArray(data.fresh) ? data.fresh : []).filter((id) => skinReleased(s, id) && !s.skins.includes(id));
   s.tracks = ownedList(TRACKS, data.tracks);
   s.track = s.tracks.includes(data.track) ? data.track : TRACKS[0].id;
-  s.frenzy = s.cat ? Math.min(num(data.frenzy), FRENZY_SECONDS * (1 + skinBonus(s, 'yarn'))) : 0;
+  s.frenzy = s.cat ? Math.min(num(data.frenzy), FRENZY_SECONDS * (1 + bonus(s, 'yarn'))) : 0;
   s.spools = s.cat ? int(data.spools, MAX_SPOOLS) : 0;
   s.savedAt = num(data.savedAt, Date.now());
   return s;

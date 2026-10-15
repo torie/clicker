@@ -315,6 +315,23 @@ button:focus-visible { outline: 2px dashed var(--amber); outline-offset: 3px; }
 .skin.wearing { border: 2px solid var(--amber); color: var(--amber); background: #1C1608; cursor: default; }
 .skin.flash { animation: flash .5s steps(4); }
 
+/* Boxes */
+.box-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.box {
+  display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 6px; min-width: 0;
+  border: 1px solid var(--rule); border-radius: 2px; background: transparent; color: var(--dim); cursor: pointer; touch-action: manipulation;
+}
+.box svg { width: 52px; height: 52px; display: block; }
+.box .box-name { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--bright); }
+.box .box-info { font-size: 10px; letter-spacing: .06em; color: var(--dim); }
+.box .box-price { font-family: var(--pixel); font-size: 22px; line-height: 1; }
+.box .box-save { font-size: 9px; font-weight: 700; letter-spacing: .1em; color: var(--alarm); }
+.box.ok { border-color: var(--phos); color: var(--bright); box-shadow: inset 0 0 18px rgba(57, 255, 106, .08); }
+.box.golden svg { filter: drop-shadow(0 0 8px rgba(255, 201, 60, .7)); }
+.box.flash { animation: flash .5s steps(4); }
+.parts-line { margin: 0; font-size: 11px; color: var(--amber); }
+.loot .ln.c0, .loot .ln.c1, .loot .ln.c2, .loot .ln.c3, .loot .ln.c4 { border-color: var(--cls); color: var(--cls); background: color-mix(in srgb, var(--cls) 8%, #0B120D); }
+
 /* Skin classes. Each card, tab and sheet takes its colour from --cls. */
 .c0 { --cls: #8FBF9F; } .c1 { --cls: #5CC8FF; } .c2 { --cls: #C77DFF; } .c3 { --cls: #FF6BD6; } .c4 { --cls: #FFD479; } .c5 { --cls: #FF3BD4; }
 .cls-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
@@ -644,3 +661,4 @@ svg.fx-err { animation: glitch 1.1s steps(1) infinite; }
 /* An empty underling spot keeps its space, so every belt starts at the same place. */
 .bay .kit[hidden] { display: block; visibility: hidden; }
 #screen-factory:not(.crewed) .bay .kit[hidden] { display: none; }
+.sheet-cls.box-odds { color: var(--bright); letter-spacing: .06em; text-transform: none; }

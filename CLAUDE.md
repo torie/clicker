@@ -27,7 +27,7 @@ Phone-first incremental clicker game, shipped as a PWA on GitHub Pages. Plain HT
 | `scripts/balance-sim.mjs` | Greedy-player simulation against the real rules. Run it after any price or rate change. |
 | `scripts/make-icons.mjs` | Regenerates `icons/*.png` (pixel "+1" button). |
 
-Checks: `npm test` (47 tests, all passing), `node scripts/balance-sim.mjs [--skins 0|1 --taps N --collect S --daily 0|1 --yarn S --worth S --seed N --limit S --trace --load SAVE --save-at N --save-to FILE]`, `npm start` then open http://localhost:8080 at phone size. `#reset` on the URL wipes the save.
+Checks: `npm test` (49 tests, all passing), `node scripts/balance-sim.mjs [--skins 0|1 --taps N --collect S --daily 0|1 --yarn S --worth S --seed N --limit S --trace --load SAVE --save-at N --save-to FILE]`, `npm start` then open http://localhost:8080 at phone size. `#reset` on the URL wipes the save.
 
 ## Game design (decided with the user)
 
@@ -104,6 +104,12 @@ Checks: `npm test` (47 tests, all passing), `node scripts/balance-sim.mjs [--ski
     - **Price is fixed at release:** `CLASSES[c].secs` seconds of income at that moment, at least the class floor (25K / 250K / 2.5M / 25M / 250M / 1B), rounded to two digits (`s.released[id]`). Skins owned in old saves count as released.
     - **Bonuses (only the worn skin counts):** taps, cat clicks, factories, lucky-click payout, golden yarn duration, earnings while away, kitten XP, or all income (half value). Common +5→10% up its ladder, rare +25%, epic +50%, mythic +100%, legendary +100% all income plus +200% of one more, broken +300% all, +100% yarn, +300% away. Applied in `skinBonus` → `gainMult`, `tapMult`, `catClicks`, `syncCrew` (factories), `luckMult`, `catchYarn`, `tickXp`.
     - **UI:** a "wearing" card, class tabs (owned/total, a dot for new ones), locked skins as black silhouettes with their condition and progress, NEW tags, a count badge on the bag, and a toast when a skin is released after the store is open. Tapping a locked skin opens the sheet as info only.
+  - **Boxes (2026-10-15, the user's idea):** four boxes at the top of the store, bought for points and opened on the spot (`BOXES`, `buyBox` in `game.js`):
+    - Cardboard box (1 item), Wooden crate (3), Iron chest (5), Golden chest (8). Each item rolls a class from the box's odds (the golden chest has no commons), then a kind.
+    - **Kinds:** an upgrade (a permanent +2/5/10/25/50% by class to one bonus type, stored in `s.parts`, added to the worn skin's bonus by `bonus()`), a skin of that class you don't own (even unreleased; never ERR_CAT), a crate of 1/3/6/12/24 min of income, golden spools, or blueprints.
+    - **Price** = the box's expected upgrade value × 38 s of income per +1%, with a discount for bigger boxes (0 / 15 / 30 / 45%), so bigger boxes are better value: about 2 / 8 / 17.5 / 38 min of income. Crates are kept small so they never pay a box back on their own (at most ~25% on average).
+    - The sheet shows the odds; after buying it lists what was inside, best first, and offers ANOTHER. A line under the boxes sums up the upgrades found so far.
+    - Not modelled in the balance sim.
     - **Play-test code:** the store has a CODE field at the bottom. `yumi` unlocks and gives every skin for free (`CODES` / `redeemCode` in `game.js`). It works in the live build too, so anyone who knows it can use it.
     - The sim (`--skins 1`, the default) buys and wears skins when they pay off: a full game goes from ~120 to ~113 min, ~119 skins released by 10T. Presets were regenerated with the new stats.
   - **Jukebox:** Silo Shuffle (free), Kitten Cruise 2M, Neon Commute 5M, Lullaby.exe 10M. Every track has a 20 s ▶ preview. Choosing or buying a track turns the music on. The songs are in `src/audio/songs.js`; names and prices are `TRACKS` in `game.js`.

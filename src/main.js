@@ -831,6 +831,29 @@ function openStore() {
 $('open-store').addEventListener('click', openStore);
 $('store-back').addEventListener('click', () => { closeConfirm(); stopPreview(); ui.newHere.clear(); ui.view = 'main'; render(); });
 
+// Boxes: bought for points, opened on the spot. Each item's class sets how good it is.
+const BOX_COLORS = { cardboard: ['#C8A27A', '#8B6B3C'], wooden: ['#8B5A3C', '#4E3018'], iron: ['#9AA3A0', '#4E5652'], golden: ['#FFC93C', '#B8860B'] };
+function boxSvg(id) {
+  const [c, d] = BOX_COLORS[id];
+  return '<svg viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">' +
+    `<rect x="2" y="4" width="12" height="3" fill="${c}"/><rect x="2" y="7" width="12" height="1" fill="${d}"/>` +
+    `<rect x="2" y="8" width="12" height="6" fill="${c}"/><rect x="2" y="13" width="12" height="1" fill="${d}"/>` +
+    `<rect x="4" y="4" width="1" height="10" fill="${d}"/><rect x="11" y="4" width="1" height="10" fill="${d}"/>` +
+    `<rect x="7" y="6" width="2" height="3" fill="${id === 'golden' ? '#FFF3B0' : id === 'iron' ? '#FFE66B' : d}"/>` +
+    (id === 'golden' ? '<rect x="1" y="2" width="1" height="1" fill="#FFF3B0" class="spark s0"/><rect x="14" y="3" width="1" height="1" fill="#FFF3B0" class="spark s1"/>' : '') + '</svg>';
+}
+const oddsText = (b) => b.odds.map((p, c) => (p ? G.CLASSES[c].name + ' ' + p + '%' : '')).filter(Boolean).join(' · ');
+const boxCards = G.BOXES.map((b, i) => {
+  const el = h('button', 'box ' + b.id);
+  el.innerHTML = boxSvg(b.id);
+  const name = h('span', 'box-name', b.name), info = h('span', 'box-info', b.items === 1 ? '1 ITEM' : b.items + ' ITEMS');
+  const price = h('span', 'box-price'), save = h('span', 'box-save', b.discount < 1 ? 'SAVE ' + Math.round((1 - b.discount) * 100) + '%' : 'BEST FOR A TASTE');
+  el.append(name, info, price, save);
+  el.addEventListener('click', () => openConfirm('box', i, el));
+  $('box-grid').appendChild(el);
+  return { el, price };
+});
+
 // Skins: one tab per class. A class's cards are built the first time its tab opens.
 const pct = (v) => { const p = v * 100; return '+' + (p < 10 ? +p.toFixed(1) : Math.round(p)) + '%'; };
 const bonusText = (sk) => sk.bonus.map((b) => pct(b.value) + ' ' + G.BONUSES[b.type].label).join(' · ') || 'No bonus';
@@ -914,12 +937,23 @@ $('code-form').addEventListener('submit', (e) => {
 let confirming = null; // {kind: 'skin' | 'track', item, returnFocus}
 
 function openConfirm(kind, id, returnFocus) {
-  const item = (kind === 'skin' ? G.SKINS : G.TRACKS).find((x) => x.id === id);
-  confirming = { kind, item, returnFocus };
+  const item = kind === 'box' ? G.BOXES[id] : (kind === 'skin' ? G.SKINS : G.TRACKS).find((x) => x.id === id);
+  confirming = { kind, item, returnFocus, idx: id, loot: null };
+  $('confirm-loot').hidden = true;
+  $('confirm-cancel').textContent = 'CANCEL';
+  $('confirm').querySelector('.sheet-price').hidden = false;
   const art = $('confirm-art');
   $('confirm-cls').hidden = kind !== 'skin';
+  if (kind === 'box') $('confirm-cls').className = 'sheet-cls box-odds';
+  else $('confirm-cls').className = 'sheet-cls';
   $('confirm').querySelector('.sheet').className = 'sheet' + (kind === 'skin' ? ' c' + item.cls : '');
-  if (kind === 'skin') {
+  if (kind === 'box') {
+    art.className = 'sheet-art';
+    art.innerHTML = boxSvg(item.id);
+    $('confirm-cls').hidden = false;
+    $('confirm-cls').textContent = oddsText(item);
+    $('confirm-desc').textContent = (item.items === 1 ? 'One item' : item.items + ' items') + ': upgrades that last for good, skins (even ones not released yet), clicks, golden spools or blueprints. The better the class, the better the item.';
+  } else if (kind === 'skin') {
     const locked = !G.skinReleased(state, id), secret = isSecret(item);
     art.innerHTML = catSvg(id);
     art.className = 'sheet-art' + (locked ? ' locked' : '');
@@ -956,6 +990,7 @@ function closeConfirm() {
 function confirmBuy() {
   if (!confirming) return;
   const { kind, item } = confirming;
+  if (kind === 'box') { openBox(); return; }
   if (kind === 'skin' && G.buySkin(state, item.id)) {
     G.equipSkin(state, item.id);
     flash('skin-' + item.id);
@@ -968,10 +1003,33 @@ function confirmBuy() {
   if (kind === 'track') setMusic(true); // play the track you just bought
 }
 
-/** Tracks have a fixed price; a skin costs what it was priced at when it was released. */
+/** Buys and opens the box in the sheet, which then shows what was inside (and offers another). */
+function openBox() {
+  const items = G.buyBox(state, confirming.idx);
+  if (!items) return;
+  confirming.loot = items;
+  flash('box-' + confirming.idx);
+  const box = $('confirm-loot');
+  box.textContent = '';
+  items.forEach((it, i) => {
+    const ln = h('div', 'ln c' + it.cls, '> ' + G.CLASSES[it.cls].name.toUpperCase() + ' · ' + it.text);
+    ln.style.animationDelay = (0.15 + i * 0.25) + 's';
+    box.appendChild(ln);
+  });
+  box.hidden = false;
+  $('confirm-title').textContent = confirming.item.name.toUpperCase() + ' OPENED';
+  $('confirm-cls').hidden = true;
+  $('confirm-desc').textContent = '';
+  $('confirm-cancel').textContent = 'DONE';
+  if (items.some((it) => it.kind === 'skin')) ui.freshSeen = state.fresh.length;
+  save();
+  render();
+}
+
+/** Tracks have a fixed price; a skin costs what it was priced at when it was released; a box follows income. */
 function itemPrice() {
   const { kind, item } = confirming;
-  return kind === 'skin' ? G.skinPrice(state, item.id) : item.price;
+  return kind === 'box' ? G.boxPrice(state, confirming.idx) : kind === 'skin' ? G.skinPrice(state, item.id) : item.price;
 }
 function renderConfirm() {
   if (!confirming) return;
@@ -986,7 +1044,7 @@ function renderConfirm() {
   set($('confirm-price'), 'text', G.fmt(price));
   set($('confirm-have'), 'text', can ? 'YOU HAVE ' + G.fmt(state.pts) : 'NEED ' + G.fmt(price - state.pts) + ' MORE');
   set($('confirm-buy'), 'disabled', !can);
-  set($('confirm-buy'), 'text', can ? 'BUY FOR ' + G.fmt(price) : 'NOT ENOUGH');
+  set($('confirm-buy'), 'text', !can ? 'NOT ENOUGH' : (confirming.loot ? 'ANOTHER · ' : 'BUY FOR ') + G.fmt(price));
   const previewing = !!preview && confirming.kind === 'track' && preview.id === confirming.item.id;
   set($('confirm-preview'), 'text', previewing ? '■ STOP PREVIEW' : '▶ PREVIEW 20s');
   set($('confirm-preview'), 'aria-pressed', String(previewing));
@@ -1006,6 +1064,15 @@ function renderStore() {
   const s = state;
   set($('store-pts'), 'text', G.fmt(s.pts));
   renderConfirm();
+  G.BOXES.forEach((b, i) => {
+    const c = boxCards[i], price = G.boxPrice(s, i);
+    set(c.el, 'class', 'box ' + b.id + (s.pts >= price ? ' ok' : '') + flashCls('box-' + i));
+    set(c.price, 'text', G.fmt(price));
+    set(c.el, 'aria-label', b.name + ', ' + b.items + ' items, costs ' + G.fmt(price));
+  });
+  const parts = Object.entries(s.parts).filter(([, v]) => v > 0);
+  set($('parts-line'), 'hidden', !parts.length);
+  set($('parts-line'), 'text', 'UPGRADES FROM BOXES: ' + parts.map(([t, v]) => pct(v) + ' ' + G.BONUSES[t].label).join(' · '));
   const worn = G.SKINS.find((sk) => sk.id === s.skin);
   if ($('wearing-art')._skin !== s.skin) {
     $('wearing-art')._skin = s.skin;
