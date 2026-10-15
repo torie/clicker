@@ -7,6 +7,9 @@
 // no income source makes the others pointless. The prices came from a search against those targets; small changes can tip the greedy
 // player into ignoring the cat or the factories, so rerun the sim after any change.
 
+import { CATALOG, CLASSES, BONUSES, skinById } from './wardrobe.js';
+export { CLASSES, BONUSES };
+
 export const MAX_FACTORIES = 5;
 export const FACTORY_COST = [500, 3300, 38000, 67000, 120000];
 export const LINE_RATE = 24;        // clicks/s per production line in factory #1
@@ -110,17 +113,10 @@ export const CREW_DRAIN = 0.2;       // a crewed factory's silo empties at 20% o
 export const KITTEN_NAMES = ['Mochi', 'Pixel', 'Biscuit', 'Tofu', 'Nugget', 'Pickles', 'Waffles', 'Noodle',
   'Pumpkin', 'Sprout', 'Bean', 'Toast', 'Muffin', 'Pepper', 'Ziggy'];
 
-// Cosmetics sold in the store, which opens at goal 2. They change nothing in the economy.
-// The first entry of each list is free and owned from the start. Visuals live in src/skins.js
-// and src/audio/songs.js, keyed by id.
-export const SKINS = [
-  {id: 'classic', name: 'Classic', price: 0},
-  {id: 'ginger', name: 'Ginger tabby', price: 1e6},
-  {id: 'snow', name: 'Snowball', price: 2e6},
-  {id: 'midnight', name: 'Midnight', price: 4e6},
-  {id: 'tuxedo', name: 'Tuxedo', price: 8e6},
-  {id: 'royal', name: 'Royal', price: 2e7}
-];
+// Cat skins (catalog in src/wardrobe.js, art in src/skins.js): each is released when its unlock
+// condition is met, and from then on sold in the store (which opens at goal 2) at a price fixed at
+// release. The worn skin gives its bonus. Tracks are cosmetic; the first is free and owned from the start.
+export const SKINS = CATALOG;
 export const TRACKS = [
   {id: 'silo', name: 'Silo Shuffle', price: 0},
   {id: 'cruise', name: 'Kitten Cruise', price: 2e6},
@@ -131,8 +127,14 @@ export const TRACKS = [
 export function newGame() {
   return {v: 1, pts: 0, best: 0, total: 0, own: {auto: 0, x2: 0, x4: 0, luck: 0, power: 0, train: 0}, facs: [], goalIdx: 0, cat: false,
     storeOpen: false, crew: [], recruit: null, subRecruit: null, care: {day: '', done: []}, happy: 0, frenzy: 0, away: false,
-    seed: Math.floor(Math.random() * 2 ** 31), rolls: 0, skins: ['classic'], skin: 'classic', tracks: ['silo'], track: 'silo', savedAt: Date.now()};
+    seed: Math.floor(Math.random() * 2 ** 31), rolls: 0, skins: ['classic'], skin: 'classic', tracks: ['silo'], track: 'silo', savedAt: Date.now(),
+    stats: newStats(), feats: [], log: [], released: {classic: 0}, fresh: []};
 }
+
+// Counters behind the skin unlocks. `play` is seconds of active play; the *Run ones are current streaks.
+const STAT_KEYS = ['taps', 'lucky', 'play', 'collects', 'upg', 'ext', 'yarn', 'ftaps', 'care', 'happy', 'streak', 'streakMax',
+  'promos', 'moves', 'back', 'luckyRun', 'yarnRun', 'burst'];
+const newStats = () => Object.fromEntries(STAT_KEYS.map((k) => [k, 0]));
 
 export function newFactory(i) {
   return {i, lines: 1, turbo: 0, silo: 0, dock: 0, store: 0};
@@ -143,12 +145,12 @@ export const upgradeCost = (s, u) => cost(u, s.own[u.id]);
 export const extensionCost = (e, f) => Math.ceil(cost(e, f[e.id] - e.min) * Math.pow(TIER_COST, f.i));
 
 export const perClick = (s) => Math.pow(2, s.own.x2) * Math.pow(4, s.own.x4);
-export const catClicks = (s) => (s.cat ? (CAT_CPS + CAT_TRAIN * s.own.train) * (1 + 0.25 * crewTrait(s, 'pal')) : 0);
+export const catClicks = (s) => (s.cat ? (CAT_CPS + CAT_TRAIN * s.own.train) * (1 + 0.25 * crewTrait(s, 'pal')) * (1 + skinBonus(s, 'cat')) : 0);
 /** The cat's clicks are plain clicks: Power tap only works for the player's own taps. */
 export const catRate = (s) => catClicks(s) * perClick(s);
 /** Everything earned is multiplied by the level bonus and, while it lasts, the golden yarn frenzy. */
 export const levelBonus = (s) => Math.pow(LEVEL_BONUS, Math.max(0, s.goalIdx - 3));
-export const gainMult = (s) => levelBonus(s) * (s.frenzy > 0 ? FRENZY_MULT : 1);
+export const gainMult = (s) => levelBonus(s) * (s.frenzy > 0 ? FRENZY_MULT : 1) * (1 + skinBonus(s, 'all')) * (s.away ? 1 + skinBonus(s, 'away') : 1);
 export const perSec = (s) => (s.own.auto + catRate(s)) * gainMult(s);
 export const lineRate = (f) => LINE_RATE * Math.pow(TIER_OUT, f.i) * Math.pow(2, f.turbo);
 /** `kitOn` and `boost` are set by syncCrew while a kitten runs the factory; `gm` is gainMult. */
@@ -208,7 +210,7 @@ export function syncCrew(s) {
     const k = crewOn(s) && kittenAt(s, i);
     f.kitOn = k ? true : undefined;
     f.boost = k ? kittenBoost(s, k, i) : undefined;
-    f.gm = gm;
+    f.gm = gm * (1 + skinBonus(s, 'factory'));
   });
 }
 
@@ -239,6 +241,7 @@ export const hireCost = (i) => HIRE_COST[i];
 export function hireKitten(s, i, free = false) {
   if (!crewOn(s) || !s.facs[i] || kittenAt(s, i) || (!free && s.pts < hireCost(i))) return false;
   if (!free) s.pts -= hireCost(i);
+  logBuy(s, 'h' + i);
   const r = s.recruit;
   s.crew.push({name: r.name, trait: r.trait, fav: r.fav, fac: i, lvl: 1, xp: 0, subs: []});
   s.recruit = rollKitten(s);
@@ -253,13 +256,15 @@ export function promoteKitten(s, n) {
   s.pts -= promoteCost(s, k);
   k.lvl = kittenLevel(k) + 1;
   k.xp = 0;
+  s.stats.promos++;
   syncCrew(s);
   return true;
 }
 
 /** Fills every kitten's XP bar (it stops at full until the kitten is promoted). */
 function tickXp(s, dt) {
-  for (const k of s.crew) k.xp = Math.min(xpNeed(k), (k.xp || 0) + xpRate(k) * dt);
+  const m = 1 + skinBonus(s, 'xp');
+  for (const k of s.crew) k.xp = Math.min(xpNeed(k), (k.xp || 0) + xpRate(k) * m * dt);
 }
 
 function rollSub(s) {
@@ -276,6 +281,7 @@ export function hireSub(s, n) {
   if (!k || !s.subRecruit || subs(k).length >= slots(s, k) || s.pts < subCost(s)) return false;
   s.pts -= subCost(s);
   k.subs = [...subs(k), {...s.subRecruit}];
+  if (k.subs.length === SLOT_LEVELS.length && k.subs.every((u) => u.trait === k.trait)) markFeat(s, 'team');
   s.subRecruit = rollSub(s);
   syncCrew(s);
   return true;
@@ -284,9 +290,16 @@ export function hireSub(s, n) {
 /** Catching the golden yarn: all income ×FRENZY_MULT for FRENZY_SECONDS. */
 export function catchYarn(s) {
   if (!s.cat) return false;
-  s.frenzy = FRENZY_SECONDS;
+  s.frenzy = FRENZY_SECONDS * (1 + skinBonus(s, 'yarn'));
+  s.stats.yarn++;
+  s.stats.burst = 0;
+  if (++s.stats.yarnRun >= 10) markFeat(s, 'yarn10');
   syncCrew(s);
   return true;
+}
+/** A golden yarn rolled past without being caught: the catch streak starts over. */
+export function missYarn(s) {
+  s.stats.yarnRun = 0;
 }
 
 /** Moves kitten n to factory i, swapping with the kitten already there. */
@@ -296,10 +309,16 @@ export function moveKitten(s, n, i) {
   const other = kittenAt(s, i);
   if (other) other.fac = k.fac;
   k.fac = i;
+  s.stats.moves++;
   syncCrew(s);
   return true;
 }
 
+/** The day before a 'YYYY-MM-DD' date. */
+export function dayBefore(day) {
+  const [y, m, d] = day.split('-').map(Number), t = Date.UTC(y, m - 1, d - 1);
+  return isFinite(t) ? new Date(t).toISOString().slice(0, 10) : '';
+}
 /** Care time, once a day (`today` is the player's local date, e.g. '2026-10-11'). */
 const careToday = (s, today) => (s.care.day === today ? s.care.done : []);
 export const careDone = (s, today, step) => careToday(s, today).includes(step);
@@ -307,8 +326,15 @@ export const careReady = (s, today) => crewOn(s) && s.crew.length > 0 && careTod
 /** Does one step of today's care time. The last of the three makes the crew happy. */
 export function doCare(s, today, step) {
   if (!careReady(s, today) || !CARE_STEPS.includes(step) || careDone(s, today, step)) return false;
-  s.care = {day: today, done: [...careToday(s, today), step]};
-  if (s.care.done.length === CARE_STEPS.length) s.happy = HAPPY_SECONDS;
+  s.care = {day: today, done: [...careToday(s, today), step], last: s.care.last || ''};
+  s.stats.care++;
+  if (s.care.done.length === CARE_STEPS.length) {
+    s.happy = HAPPY_SECONDS;
+    s.stats.happy++;
+    s.stats.streak = s.care.last === dayBefore(today) ? s.stats.streak + 1 : 1;
+    s.stats.streakMax = Math.max(s.stats.streakMax, s.stats.streak);
+    s.care.last = today;
+  }
   syncCrew(s);
   return true;
 }
@@ -349,16 +375,32 @@ export function step(s, dt) {
   if (s.happy > 0) s.happy = Math.max(0, s.happy - dt);
   if (s.frenzy > 0) s.frenzy = Math.max(0, s.frenzy - dt);
   if (crewOn(s)) tickXp(s, dt);
+  if (!s.away) s.stats.play += dt;
+  releaseSkins(s);
 }
 
 /** Power tap's part of every tap: a share of the income per second. Lucky clicks don't multiply it. */
 export const powerGain = (s) => s.own.power * POWER_SHARE * income(s);
-export const tapGain = (s) => perClick(s) * gainMult(s) + powerGain(s);
+export const tapMult = (s) => 1 + skinBonus(s, 'tap');
+export const tapGain = (s) => (perClick(s) * gainMult(s) + powerGain(s)) * tapMult(s);
+export const luckMult = (s) => LUCK_MULT * (1 + skinBonus(s, 'luck'));
 
 export function tap(s, rng = Math.random) {
   const lucky = rng() < LUCK_CHANCE * s.own.luck;
-  const gain = perClick(s) * gainMult(s) * (lucky ? LUCK_MULT : 1) + powerGain(s);
+  const gain = (perClick(s) * gainMult(s) * (lucky ? luckMult(s) : 1) + powerGain(s)) * tapMult(s);
   earn(s, gain);
+  const st = s.stats;
+  st.taps++;
+  if (lucky) {
+    st.lucky++;
+    st.luckyRun++;
+    if (st.luckyRun >= 2) markFeat(s, 'lucky2');
+    if (st.luckyRun >= 3) markFeat(s, 'lucky3');
+  } else st.luckyRun = 0;
+  if (s.frenzy > 0) {
+    st.ftaps++;
+    if (++st.burst >= 150) markFeat(s, 'frenzy');
+  }
   return {gain, lucky};
 }
 
@@ -369,6 +411,7 @@ export function collect(s, i) {
   if (g < 1) return 0;
   f.store -= g;
   earn(s, g);
+  s.stats.collects++;
   return g;
 }
 
@@ -383,6 +426,8 @@ export function buyUpgrade(s, id) {
   if (s.pts < c) return false;
   s.pts -= c;
   s.own[id]++;
+  s.stats.upg++;
+  logBuy(s, 'u' + id);
   return true;
 }
 
@@ -393,6 +438,7 @@ export function buildFactory(s) {
   if (n >= MAX_FACTORIES || s.pts < FACTORY_COST[n]) return -1;
   s.pts -= FACTORY_COST[n];
   s.facs.push(newFactory(n));
+  logBuy(s, 'f' + n);
   return n;
 }
 
@@ -406,6 +452,12 @@ export function buyExtension(s, i, id) {
   if (s.pts < c) return false;
   s.pts -= c;
   f[id]++;
+  s.stats.ext++;
+  logBuy(s, 'e' + i + id);
+  // Order feats: Turbo, Line, Silo in one factory; and one extension in each factory from #1 to #5.
+  const last = (n) => s.log.slice(-n).join(',');
+  if (last(3) === ['turbo', 'lines', 'silo'].map((x) => 'e' + i + x).join(',')) markFeat(s, 'combo');
+  if (s.log.length >= 5 && s.log.slice(-5).every((x, j) => x.startsWith('e' + j))) markFeat(s, 'stairs');
   return true;
 }
 
@@ -437,19 +489,106 @@ export function checkGoal(s) {
 /** True once the last level has been reached. */
 export const finalGoalReached = (s) => s.goalIdx >= GOALS.length;
 
-function buyCosmetic(s, list, owned, id) {
-  const item = list.find((x) => x.id === id);
-  if (!s.storeOpen || !item || s[owned].includes(id) || s.pts < item.price) return false;
-  s.pts -= item.price;
-  s[owned].push(id);
+// ---------- skins ----------
+
+/** The worn skin's bonus of one type (0.25 = +25%). */
+export function skinBonus(s, type) {
+  const sk = skinById.get(s.skin);
+  return sk ? sk.bonus.reduce((a, b) => a + (b.type === type ? b.value : 0), 0) : 0;
+}
+export function markFeat(s, id) {
+  if (!s.feats.includes(id)) s.feats.push(id);
+}
+/** The last few purchases, for the order feats. */
+function logBuy(s, code) {
+  s.log = [...s.log.slice(-4), code];
+}
+
+/** The value of an unlock stat: counters, or things the state already knows. */
+export function statValue(s, k) {
+  switch (k) {
+    case 'play': return s.stats.play / 60; // minutes
+    case 'earned': return s.total;
+    case 'fac': return s.facs.length;
+    case 'hires': return s.crew.length;
+    case 'maxLvl': return s.crew.reduce((a, k2) => Math.max(a, kittenLevel(k2)), 0);
+    case 'subs': return subCount(s);
+    case 'owned': return s.skins.length;
+    case 'tracks': return s.tracks.length - 1;
+    case 'level': return s.goalIdx;
+    case 'streak': return s.stats.streakMax;
+    default: return s.stats[k] || 0;
+  }
+}
+/** How far along a skin's unlock condition is, from 0 to 1. */
+export function skinProgress(s, sk) {
+  const c = sk.cond;
+  if (!c) return 1;
+  if (c.f) return s.feats.includes(c.f) ? 1 : 0;
+  if (c.skins) return c.skins.filter((id) => s.skins.includes(id)).length / c.skins.length;
+  return Math.min(1, statValue(s, c.k) / c.at);
+}
+export const skinReleased = (s, id) => id in s.released;
+export const skinPrice = (s, id) => s.released[id];
+/** What a newly released skin of class c costs: CLASSES[c].secs of income at the time (at least its floor). */
+export function releasePrice(s, c) {
+  const k = CLASSES[c], pace = income(s) / (s.frenzy > 0 ? FRENZY_MULT : 1);
+  const p = Math.max(k.floor, k.secs * pace);
+  const mag = Math.pow(10, Math.floor(Math.log10(p)) - 1); // two significant digits
+  return Math.ceil(p / mag) * mag;
+}
+/** Releases every skin whose condition is met. Returns the ids released now (also added to s.fresh). */
+export function releaseSkins(s) {
+  const out = [];
+  for (const sk of SKINS) {
+    if (skinReleased(s, sk.id) || skinProgress(s, sk) < 1) continue;
+    s.released[sk.id] = releasePrice(s, sk.cls);
+    out.push(sk.id);
+  }
+  if (out.length) s.fresh = [...s.fresh, ...out];
+  return out;
+}
+/** Marks released skins as seen in the store (they stop counting as new). */
+export function seeSkins(s, ids) {
+  s.fresh = s.fresh.filter((id) => !ids.includes(id));
+}
+
+export function buySkin(s, id) {
+  if (!s.storeOpen || !skinReleased(s, id) || s.skins.includes(id) || s.pts < skinPrice(s, id)) return false;
+  s.pts -= skinPrice(s, id);
+  s.skins.push(id);
   return true;
 }
-export const buySkin = (s, id) => buyCosmetic(s, SKINS, 'skins', id);
-export const buyTrack = (s, id) => buyCosmetic(s, TRACKS, 'tracks', id);
+// Play-test codes, entered in the store. 'yumi' unlocks every skin, for free.
+const CODES = {
+  yumi: (s) => {
+    const ids = SKINS.map((sk) => sk.id).filter((id) => !s.skins.includes(id));
+    for (const id of ids) {
+      if (!skinReleased(s, id)) s.released[id] = 0;
+      s.skins.push(id);
+    }
+    s.fresh = [];
+    return ids.length;
+  }
+};
+/** Runs a code. Returns how many things it unlocked, or -1 for an unknown code. */
+export function redeemCode(s, code) {
+  const run = CODES[String(code).trim().toLowerCase()];
+  return run ? run(s) : -1;
+}
+
+export function buyTrack(s, id) {
+  const item = TRACKS.find((x) => x.id === id);
+  if (!s.storeOpen || !item || s.tracks.includes(id) || s.pts < item.price) return false;
+  s.pts -= item.price;
+  s.tracks.push(id);
+  return true;
+}
 
 export function equipSkin(s, id) {
   if (!s.skins.includes(id)) return false;
   s.skin = id;
+  syncCrew(s);
   return true;
 }
 export function selectTrack(s, id) {
@@ -464,6 +603,7 @@ export function applyOffline(s, seconds) {
   const stored = () => s.facs.reduce((a, f) => a + f.store, 0);
   const pts0 = s.pts, store0 = stored();
   // Small steps, so the happy crew bonus runs out partway through the time away.
+  if (t >= 60) s.stats.back++;
   s.away = true;
   for (let left = t; left > 0; left -= 5) step(s, Math.min(5, left));
   s.away = false;
@@ -477,7 +617,8 @@ export function serialize(s) {
     recruit: s.recruit && {...s.recruit}, subRecruit: s.subRecruit && {...s.subRecruit}, care: {day: s.care.day, done: [...s.care.done]},
     happy: s.happy, frenzy: s.frenzy, seed: s.seed, rolls: s.rolls,
     skins: [...s.skins], skin: s.skin,
-    tracks: [...s.tracks], track: s.track, savedAt: s.savedAt};
+    tracks: [...s.tracks], track: s.track, savedAt: s.savedAt,
+    stats: {...s.stats}, feats: [...s.feats], log: [...s.log], released: {...s.released}, fresh: [...s.fresh]};
 }
 
 /** Keeps only known ids, always includes the free first item, and falls back to it if the selection isn't owned. */
@@ -537,14 +678,27 @@ export function deserialize(data) {
     const r = kitten(data.recruit);
     s.recruit = r && !s.crew.some((x) => x.name === r.name) ? r : rollKitten(s);
     if (data.care && typeof data.care.day === 'string' && Array.isArray(data.care.done)) {
-      s.care = {day: data.care.day, done: CARE_STEPS.filter((x) => data.care.done.includes(x))};
+      s.care = {day: data.care.day, done: CARE_STEPS.filter((x) => data.care.done.includes(x)),
+        last: typeof data.care.last === 'string' ? data.care.last : ''};
     }
     s.happy = Math.min(num(data.happy), HAPPY_SECONDS);
     if (underlingsOn(s)) s.subRecruit = sub(data.subRecruit) || rollSub(s);
     syncCrew(s);
   }
+  const st = data.stats && typeof data.stats === 'object' ? data.stats : {};
+  for (const k of STAT_KEYS) s.stats[k] = num(st[k]);
+  const feats = new Set(Array.isArray(data.feats) ? data.feats : []);
+  s.feats = SKINS.filter((sk) => sk.cond && sk.cond.f && feats.has(sk.cond.f)).map((sk) => sk.cond.f);
+  s.log = (Array.isArray(data.log) ? data.log : []).filter((x) => typeof x === 'string' && x.length < 12).slice(-5);
   s.skins = ownedList(SKINS, data.skins);
   s.skin = s.skins.includes(data.skin) ? data.skin : SKINS[0].id;
+  // Released skins keep the price they came out at. Skins owned from before releases existed count as released.
+  const rel = data.released && typeof data.released === 'object' ? data.released : {};
+  for (const sk of SKINS) {
+    if (typeof rel[sk.id] === 'number' && isFinite(rel[sk.id]) && rel[sk.id] >= 0) s.released[sk.id] = rel[sk.id];
+    else if (s.skins.includes(sk.id)) s.released[sk.id] = 0;
+  }
+  s.fresh = (Array.isArray(data.fresh) ? data.fresh : []).filter((id) => skinReleased(s, id) && !s.skins.includes(id));
   s.tracks = ownedList(TRACKS, data.tracks);
   s.track = s.tracks.includes(data.track) ? data.track : TRACKS[0].id;
   s.frenzy = s.cat ? Math.min(num(data.frenzy), FRENZY_SECONDS) : 0;

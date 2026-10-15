@@ -36,7 +36,8 @@ When you ship a change, bump `VERSION` in `sw.js`. Players then see **NEW VERSIO
 | `src/game.js` | Rules, balance, save format, offline progress |
 | `src/main.js` | UI, game loop, saving, music toggle |
 | `src/audio/soundtrack.js`, `src/audio/songs.js` | The chip-music synth and the four songs |
-| `src/skins.js` | Cat skins for the store |
+| `src/wardrobe.js` | The 182 cat skins: classes, unlock conditions and bonuses |
+| `src/skins.js` | The pixel art for every skin |
 | `sw.js`, `manifest.webmanifest`, `icons/` | PWA: offline cache, install metadata, icons |
 | `scripts/make-icons.mjs` | Regenerates the icons (`npm run icons`) |
 

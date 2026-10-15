@@ -33,6 +33,7 @@
         </button>
         <button class="icon-btn store-btn" id="open-store" aria-label="Store: cat skins and music" hidden>
           <svg viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true"><g fill="currentColor"><rect x="6" y="1" width="4" height="1"></rect><rect x="5" y="2" width="1" height="4"></rect><rect x="10" y="2" width="1" height="4"></rect><rect x="2" y="5" width="12" height="10"></rect></g><rect x="5" y="8" width="6" height="1" fill="#070A08"></rect></svg>
+          <span class="badge" id="store-badge" hidden>0</span>
         </button>
         <button class="icon-btn" id="music" aria-label="Music" aria-pressed="false">
           <svg viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true"><g fill="currentColor"><rect x="6" y="2" width="7" height="2"></rect><rect x="6" y="4" width="2" height="7"></rect><rect x="11" y="4" width="2" height="6"></rect><rect x="3" y="10" width="5" height="3"></rect><rect x="8" y="9" width="5" height="3"></rect></g><rect class="mute" x="1" y="7" width="14" height="2" transform="rotate(-45 8 8)" fill="currentColor"></rect></svg>
@@ -160,11 +161,25 @@
       <span>PTS <span class="vt hi" id="store-pts">0</span></span>
     </header>
     <div class="store-body">
-      <p class="store-note">Just for fun: skins and music don't change your score.</p>
-      <h2>&gt; CAT SKINS</h2>
+      <div class="wearing-card" id="wearing-card">
+        <span class="art" id="wearing-art"></span>
+        <div class="body">
+          <span class="sect">YOUR CAT IS WEARING</span>
+          <span class="nm" id="wearing-name"></span>
+          <span class="ds" id="wearing-bonus"></span>
+        </div>
+      </div>
+      <p class="store-note">New skins are released as you play: taps, play time, golden yarn, care time, buying things in the right order... The cat wears one at a time and gets its bonus.</p>
+      <h2>&gt; CAT SKINS <span class="dim" id="skin-count"></span></h2>
+      <div class="cls-tabs" id="cls-tabs" role="tablist" aria-label="Skin classes"></div>
       <div class="skin-grid" id="skin-grid"></div>
       <h2>&gt; JUKEBOX</h2>
       <div class="rows" id="track-rows"></div>
+      <h2>&gt; CODE</h2>
+      <form class="code-form" id="code-form" autocomplete="off">
+        <input class="code-input" id="code-input" type="text" inputmode="text" autocapitalize="off" spellcheck="false" maxlength="24" placeholder="ENTER A CODE" aria-label="Code">
+        <button class="collect" type="submit">OK</button>
+      </form>
     </div>
   </section>
 
@@ -172,6 +187,7 @@
     <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
       <div class="sheet-art" id="confirm-art"></div>
       <h3 id="confirm-title">BUY?</h3>
+      <p class="sheet-cls" id="confirm-cls" hidden></p>
       <p class="ds" id="confirm-desc"></p>
       <button class="preview wide" id="confirm-preview" hidden>&#9654; PREVIEW 20s</button>
       <p class="sheet-price"><span>COSTS <span class="vt" id="confirm-price">0</span></span><span id="confirm-have"></span></p>

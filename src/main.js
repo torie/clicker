@@ -125,7 +125,7 @@ function setMusic(on) {
   musicWanted = on;
   store.set(MUSIC_KEY, on ? 'on' : 'off');
   music.setSong(SONGS[state.track]);
-  if (on) music.start(); else music.stop();
+  if (on) { music.start(); G.markFeat(state, 'music'); } else music.stop();
   $('music').setAttribute('aria-pressed', String(on));
   $('music').setAttribute('aria-label', on ? 'Music on' : 'Music off');
 }
@@ -155,6 +155,7 @@ document.addEventListener('pointerdown', () => { if (musicWanted && !music.playi
 const big = $('big'), stage = $('stage');
 function doTap() {
   const r = G.tap(state);
+  if (new Date().getHours() < 5) G.markFeat(state, 'night');
   ui.taps++;
   pop(stage, '+' + G.fmt(r.gain), r.lucky ? 'lucky' : '');
   big.classList.add('pressed');
@@ -231,6 +232,8 @@ function renderMain() {
   set($('adopt'), 'hidden', !(reached && s.goalIdx === 0));
   set($('goal-done'), 'hidden', !done);
   set($('open-store'), 'hidden', !s.storeOpen);
+  set($('store-badge'), 'hidden', !s.storeOpen || !s.fresh.length);
+  set($('store-badge'), 'text', s.fresh.length > 99 ? '99' : String(s.fresh.length));
   set($('goal-title'), 'text', 'LEVEL ' + (Math.min(s.goalIdx, G.GOALS.length - 1) + 1) + ' · ' + goal.at.toLocaleString('en-US'));
   if (done) set($('done-title'), 'text', G.GOALS[G.GOALS.length - 1].at.toLocaleString('en-US') + ' REACHED');
   set($('goal-pct'), 'text', (Math.floor(frac * 1000) / 10).toFixed(1) + '%');
@@ -728,26 +731,64 @@ document.addEventListener('keydown', (e) => {
 // ---------- store (cosmetics, opens at 10,000,000) ----------
 
 function openStore() {
+  // Open on the best class with something new in it, else where the player was.
+  const fresh = state.fresh.map((id) => G.SKINS.find((sk) => sk.id === id).cls);
+  if (fresh.length) ui.cls = Math.max(...fresh);
+  seeClass();
   ui.view = 'store';
   render();
   $('store-back').focus({ preventScroll: true });
 }
 $('open-store').addEventListener('click', openStore);
-$('store-back').addEventListener('click', () => { closeConfirm(); stopPreview(); ui.view = 'main'; render(); });
+$('store-back').addEventListener('click', () => { closeConfirm(); stopPreview(); ui.newHere.clear(); ui.view = 'main'; render(); });
 
-const skinCards = G.SKINS.map((k) => {
-  const el = h('button', 'skin');
-  el.innerHTML = catSvg(k.id);
-  el.style.setProperty('--glow-c', skinGlow(k.id));
-  const name = h('span', 'skin-name', k.name), st = h('span', 'skin-state');
-  el.append(name, st);
-  el.addEventListener('click', () => {
-    if (state.skins.includes(k.id)) { G.equipSkin(state, k.id); render(); }
-    else openConfirm('skin', k.id, el);
-  });
-  $('skin-grid').appendChild(el);
-  return { el, st };
+// Skins: one tab per class. A class's cards are built the first time its tab opens.
+const pct = (v) => { const p = v * 100; return '+' + (p < 10 ? +p.toFixed(1) : Math.round(p)) + '%'; };
+const bonusText = (sk) => sk.bonus.map((b) => pct(b.value) + ' ' + G.BONUSES[b.type].label).join(' · ') || 'No bonus';
+const isSecret = (sk) => sk.secret && !G.skinReleased(state, sk.id);
+/** How far along a locked skin is, e.g. "1,234 / 4,000". */
+function progressText(sk) {
+  const c = sk.cond, p = G.skinProgress(state, sk);
+  if (!c) return '';
+  if (c.f) return p >= 1 ? 'DONE' : 'NOT YET';
+  if (c.skins) return Math.round(p * c.skins.length) + ' / ' + c.skins.length;
+  return G.fmt(Math.min(G.statValue(state, c.k), c.at)) + ' / ' + G.fmt(c.at) + (c.k === 'play' ? ' MIN' : '');
+}
+ui.cls = 0;
+ui.newHere = new Set(); // skins shown as NEW during this visit to the store
+const clsTabs = G.CLASSES.map((c, i) => {
+  const el = h('button', 'cls-tab c' + i);
+  el.setAttribute('role', 'tab');
+  const nm = h('span', '', c.name), n = h('span', 'vt'), dot = h('span', 'dot');
+  el.append(nm, n, dot);
+  el.addEventListener('click', () => { ui.cls = i; seeClass(); render(); });
+  $('cls-tabs').appendChild(el);
+  return { el, n, dot };
 });
+const skinCards = new Map();
+function buildClass(i) {
+  for (const sk of G.SKINS.filter((x) => x.cls === i)) {
+    if (skinCards.has(sk.id)) continue;
+    const el = h('button', 'skin c' + i);
+    el.innerHTML = catSvg(sk.id);
+    el.style.setProperty('--glow-c', skinGlow(sk.id));
+    const name = h('span', 'skin-name'), bonus = h('span', 'skin-bonus', bonusText(sk)), st = h('span', 'skin-state'), nw = h('span', 'new', 'NEW');
+    el.append(nw, name, bonus, st);
+    el.addEventListener('click', () => {
+      if (state.skins.includes(sk.id)) { G.equipSkin(state, sk.id); save(); render(); }
+      else openConfirm('skin', sk.id, el);
+    });
+    $('skin-grid').appendChild(el);
+    skinCards.set(sk.id, { el, name, bonus, st, nw, sk });
+  }
+}
+/** Opening a class marks its new skins as seen (they keep their NEW tag until the player leaves the store). */
+function seeClass() {
+  const ids = state.fresh.filter((id) => G.SKINS.find((sk) => sk.id === id).cls === ui.cls);
+  ids.forEach((id) => ui.newHere.add(id));
+  G.seeSkins(state, ids);
+  ui.freshSeen = state.fresh.length;
+}
 
 const trackRows = G.TRACKS.map((tr) => {
   const wrap = h('div', 'track');
@@ -768,6 +809,17 @@ const trackRows = G.TRACKS.map((tr) => {
   return { r, pv };
 });
 
+// Codes for play-testing (see redeemCode in game.js).
+$('code-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const input = $('code-input'), n = G.redeemCode(state, input.value);
+  input.value = '';
+  input.blur();
+  showToast(n < 0 ? 'UNKNOWN CODE' : n === 0 ? 'CODE OK · NOTHING NEW TO UNLOCK' : 'CODE OK · ' + n + ' SKINS UNLOCKED');
+  if (n > 0) { ui.freshSeen = state.fresh.length; save(); }
+  render();
+});
+
 // Buying always goes through a confirmation sheet, so tapping around the store never spends points by accident.
 let confirming = null; // {kind: 'skin' | 'track', item, returnFocus}
 
@@ -775,17 +827,25 @@ function openConfirm(kind, id, returnFocus) {
   const item = (kind === 'skin' ? G.SKINS : G.TRACKS).find((x) => x.id === id);
   confirming = { kind, item, returnFocus };
   const art = $('confirm-art');
+  $('confirm-cls').hidden = kind !== 'skin';
+  $('confirm').querySelector('.sheet').className = 'sheet' + (kind === 'skin' ? ' c' + item.cls : '');
   if (kind === 'skin') {
+    const locked = !G.skinReleased(state, id), secret = isSecret(item);
     art.innerHTML = catSvg(id);
+    art.className = 'sheet-art' + (locked ? ' locked' : '');
     art.style.setProperty('--glow-c', skinGlow(id));
-    $('confirm-desc').textContent = 'A new look for your cat. Just for fun: it clicks the same.';
+    $('confirm-cls').textContent = G.CLASSES[item.cls].name + ' · ' + bonusText(item);
+    $('confirm-desc').textContent = secret ? 'A secret. Nobody knows how to get this one.'
+      : (locked ? 'LOCKED · ' : 'Unlocked: ') + item.text + '. Worn by your cat, it gives the bonus above. One skin at a time.';
   } else {
+    art.className = 'sheet-art';
     const song = SONGS[id];
     art.innerHTML = '<span class="vt">♪</span>';
     $('confirm-desc').textContent = song.mood + ' · ' + song.bpm + ' BPM. Plays in place of the current track.';
   }
-  $('confirm-title').textContent = 'BUY ' + item.name.toUpperCase() + '?';
-  $('confirm-price').textContent = G.fmt(item.price);
+  const locked = kind === 'skin' && !G.skinReleased(state, id);
+  $('confirm-title').textContent = locked ? (isSecret(item) ? '???' : item.name.toUpperCase()) : 'BUY ' + item.name.toUpperCase() + '?';
+  $('confirm-price').textContent = locked ? '—' : G.fmt(itemPrice());
   $('confirm-preview').hidden = kind !== 'track';
   $('confirm').hidden = false;
   renderConfirm();
@@ -818,9 +878,22 @@ function confirmBuy() {
   if (kind === 'track') setMusic(true); // play the track you just bought
 }
 
+/** Tracks have a fixed price; a skin costs what it was priced at when it was released. */
+function itemPrice() {
+  const { kind, item } = confirming;
+  return kind === 'skin' ? G.skinPrice(state, item.id) : item.price;
+}
 function renderConfirm() {
   if (!confirming) return;
-  const price = confirming.item.price, can = state.pts >= price;
+  const { kind, item } = confirming;
+  if (kind === 'skin' && !G.skinReleased(state, item.id)) {
+    set($('confirm-have'), 'text', isSecret(item) ? '' : progressText(item));
+    set($('confirm-buy'), 'disabled', true);
+    set($('confirm-buy'), 'text', 'LOCKED');
+    return;
+  }
+  const price = itemPrice(), can = state.pts >= price;
+  set($('confirm-price'), 'text', G.fmt(price));
   set($('confirm-have'), 'text', can ? 'YOU HAVE ' + G.fmt(state.pts) : 'NEED ' + G.fmt(price - state.pts) + ' MORE');
   set($('confirm-buy'), 'disabled', !can);
   set($('confirm-buy'), 'text', can ? 'BUY FOR ' + G.fmt(price) : 'NOT ENOUGH');
@@ -843,12 +916,37 @@ function renderStore() {
   const s = state;
   set($('store-pts'), 'text', G.fmt(s.pts));
   renderConfirm();
-  G.SKINS.forEach((k, i) => {
-    const c = skinCards[i], owned = s.skins.includes(k.id), wearing = s.skin === k.id;
-    set(c.el, 'class', 'skin ' + (wearing ? 'wearing' : owned ? 'owned' : s.pts >= k.price ? 'ok' : 'no') + flashCls('skin-' + k.id));
-    set(c.st, 'text', wearing ? 'WEARING' : owned ? 'WEAR' : G.fmt(k.price));
-    set(c.el, 'aria-label', k.name + (wearing ? ', wearing' : owned ? ', owned, tap to wear' : ', costs ' + G.fmt(k.price)));
+  const worn = G.SKINS.find((sk) => sk.id === s.skin);
+  if ($('wearing-art')._skin !== s.skin) {
+    $('wearing-art')._skin = s.skin;
+    $('wearing-art').innerHTML = catSvg(s.skin);
+    $('wearing-card').style.setProperty('--glow-c', skinGlow(s.skin));
+  }
+  set($('wearing-card'), 'class', 'wearing-card c' + worn.cls);
+  set($('wearing-name'), 'text', worn.name);
+  set($('wearing-bonus'), 'text', G.CLASSES[worn.cls].name.toUpperCase() + ' · ' + bonusText(worn));
+  set($('skin-count'), 'text', s.skins.length + ' / ' + G.SKINS.length);
+  clsTabs.forEach((t, i) => {
+    const all = G.SKINS.filter((sk) => sk.cls === i);
+    set(t.el, 'aria-selected', String(i === ui.cls));
+    set(t.n, 'text', all.filter((sk) => s.skins.includes(sk.id)).length + '/' + all.length);
+    set(t.dot, 'hidden', !s.fresh.some((id) => all.some((sk) => sk.id === id)));
   });
+  buildClass(ui.cls);
+  for (const c of skinCards.values()) {
+    const k = c.sk, here = k.cls === ui.cls;
+    set(c.el, 'hidden', !here);
+    if (!here) continue;
+    const owned = s.skins.includes(k.id), wearing = s.skin === k.id, released = G.skinReleased(s, k.id), secret = isSecret(k);
+    const price = released ? G.skinPrice(s, k.id) : 0;
+    set(c.el, 'class', 'skin c' + k.cls + ' ' + (wearing ? 'wearing' : owned ? 'owned' : !released ? 'locked' : s.pts >= price ? 'ok' : 'no') + flashCls('skin-' + k.id));
+    set(c.name, 'text', secret ? '???' : k.name);
+    set(c.bonus, 'text', secret ? '▓▓▓ ▓▓ ▓▓▓▓▓' : bonusText(k));
+    set(c.nw, 'hidden', !ui.newHere.has(k.id) || owned);
+    set(c.st, 'text', wearing ? 'WEARING' : owned ? 'WEAR' : released ? G.fmt(price) : secret ? 'SECRET' : progressText(k));
+    set(c.el, 'aria-label', (secret ? 'Secret skin' : k.name) + ', ' + G.CLASSES[k.cls].name + (wearing ? ', wearing' : owned ? ', owned, tap to wear'
+      : released ? ', costs ' + G.fmt(price) : ', locked: ' + (secret ? 'secret' : k.text)));
+  }
   G.TRACKS.forEach((tr, i) => {
     const { r, pv } = trackRows[i], song = SONGS[tr.id];
     const owned = s.tracks.includes(tr.id), playing = owned && s.track === tr.id && musicWanted && !preview;
@@ -879,7 +977,7 @@ function showStoreUnlock() {
     '<span class="ln" style="animation-delay:.9s">&gt; UNPACKING CRATES... OK</span>' +
     '<span class="ln bigcat" style="animation-delay:1.5s">' + catSvg('royal', '#050705') + '</span>' +
     '<span class="ln title" style="animation-delay:2.1s">STORE OPEN</span>' +
-    '<span class="ln" style="animation-delay:2.7s">&gt; CAT SKINS: ' + (G.SKINS.length - 1) + ' NEW LOOKS</span>' +
+    '<span class="ln" style="animation-delay:2.7s">&gt; CAT SKINS: ' + state.fresh.length + ' WAITING, ' + G.SKINS.length + ' TO COLLECT, EACH WITH A BONUS</span>' +
     '<span class="ln" style="animation-delay:3.2s">&gt; JUKEBOX: ' + (G.TRACKS.length - 1) + ' NEW TRACKS</span>' +
     '<span class="ln" style="animation-delay:3.7s">&gt; FIND IT ANY TIME: THE BAG, TOP RIGHT</span>' +
     '<span class="ln" style="animation-delay:3.9s">&gt; ALSO NEW: HIRE KITTENS TO RUN YOUR FACTORIES (THE PAW, TOP RIGHT)</span>' +
@@ -940,10 +1038,11 @@ function tickYarn(dt) {
   void yarn.offsetWidth; // restart the roll
   yarn.style.animation = '';
   clearTimeout(tickYarn.timer);
-  tickYarn.timer = setTimeout(() => { yarn.hidden = true; }, YARN_ROLL_MS);
+  tickYarn.timer = setTimeout(() => { yarn.hidden = true; G.missYarn(state); }, YARN_ROLL_MS);
 }
 $('gold-yarn').addEventListener('click', () => {
   $('gold-yarn').hidden = true;
+  clearTimeout(tickYarn.timer);
   if (!G.catchYarn(state)) return;
   showToast('GOLDEN YARN · ALL INCOME ×' + G.FRENZY_MULT + ' FOR ' + G.FRENZY_SECONDS + 's');
   save();
@@ -951,6 +1050,16 @@ $('gold-yarn').addEventListener('click', () => {
 });
 
 // ---------- loop ----------
+
+/** A toast for skins released while playing (after the store opens; before that they wait for its boot screen). */
+ui.freshSeen = state.fresh.length;
+function announceSkins() {
+  const n = state.fresh.length - ui.freshSeen;
+  ui.freshSeen = state.fresh.length;
+  if (n <= 0 || !state.storeOpen || !$('boot').hidden) return;
+  const sk = G.SKINS.find((x) => x.id === state.fresh[state.fresh.length - 1]);
+  showToast(n === 1 ? 'NEW ' + G.CLASSES[sk.cls].name.toUpperCase() + ' SKIN: ' + sk.name.toUpperCase() + ' · IN THE STORE' : n + ' NEW SKINS IN THE STORE');
+}
 
 function render() {
   set($('screen-main'), 'hidden', ui.view !== 'main');
@@ -975,6 +1084,7 @@ setInterval(() => {
   last = now;
   G.step(state, Math.min(dt, G.MAX_OFFLINE_SECONDS));
   tickYarn(dt);
+  announceSkins();
   if (state.cat && ui.view === 'main' && !document.hidden) {
     ui.catTimer += dt;
     if (ui.catTimer >= 0.5) {

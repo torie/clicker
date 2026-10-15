@@ -1,7 +1,7 @@
 // Offline support: serve from cache, refresh the cache in the background.
 // Bump VERSION when shipping. The new worker then downloads the new files and waits; the game shows
 // "NEW VERSION · TAP TO RELOAD", and tapping it tells the worker to take over (SKIP_WAITING).
-const VERSION = 'clicker-v15';
+const VERSION = 'clicker-v17';
 const SHELL = [
   './',
   './index.html',
@@ -12,6 +12,7 @@ const SHELL = [
   './src/audio/soundtrack.js',
   './src/audio/songs.js',
   './src/skins.js',
+  './src/wardrobe.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/apple-touch-icon.png'

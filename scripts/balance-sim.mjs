@@ -1,5 +1,5 @@
 // Simulates a greedy player against the real rules in src/game.js, to tune prices.
-// Run: node scripts/balance-sim.mjs [--taps 5] [--collect 20] [--daily 1] [--yarn 480] [--worth 300] [--seed 1] [--trace] [--load SAVE.json]
+// Run: node scripts/balance-sim.mjs [--skins 1] [--taps 5] [--collect 20] [--daily 1] [--yarn 480] [--worth 300] [--seed 1] [--trace] [--load SAVE.json]
 //   [--save-at 950000 --save-to test/presets/precat.json]  (--trace lists every purchase; --save-at writes the
 //   save the first time the balance reaches that many points, for play-testing from that point)
 //
@@ -19,12 +19,13 @@ const arg = (name, d) => {
 const TRACE = process.argv.includes('--trace');
 // Like a real player, buys anything that pays for itself within WORTH seconds even when saving for the goal would be quicker.
 const WORTH = arg('worth', 300);
+const SKINS = arg('skins', 1);
 const TAPS = arg('taps', 5), COLLECT = arg('collect', 20), DAILY = arg('daily', 1), YARN = arg('yarn', 480), LIMIT = arg('limit', 8 * 3600);
 const SAVE_AT = arg('save-at', 0), SAVE_TO = process.argv[process.argv.indexOf('--save-to') + 1];
 const LOAD = process.argv.includes('--load') ? process.argv[process.argv.indexOf('--load') + 1] : null;
 
 // What tapping earns per second on average, lucky clicks included.
-const tapIncome = (s) => TAPS * (G.perClick(s) * G.gainMult(s) * (1 + (G.LUCK_MULT - 1) * G.LUCK_CHANCE * s.own.luck) + G.powerGain(s));
+const tapIncome = (s) => TAPS * (G.perClick(s) * G.gainMult(s) * (1 + (G.luckMult(s) - 1) * G.LUCK_CHANCE * s.own.luck) + G.powerGain(s)) * G.tapMult(s);
 
 // Income the player actually gets per second, counting silos that fill before collection.
 function effectiveIncome(s) {
@@ -79,6 +80,14 @@ function options(s) {
     if (G.canPromote(k)) o.push(bundle(s, 'promote:' + k.name, [(t) => G.promoteKitten(t, n)]));
     if (s.subRecruit && (k.subs || []).length < G.slots(s, k)) o.push(bundle(s, 'sub:' + k.name, [(t) => G.hireSub(t, n)]));
   });
+  // Skins (with --skins 1): buy a released skin and put it on, if that pays off like anything else.
+  // Only the strongest few of each bonus type are worth trying.
+  if (SKINS && s.storeOpen) {
+    const worth = (id) => G.SKINS.find((sk) => sk.id === id).bonus.reduce((a, b) => a + b.value, 0);
+    const top = (ids) => ids.sort((a, b) => worth(b) - worth(a)).slice(0, 6);
+    for (const id of top(Object.keys(s.released).filter((id) => !s.skins.includes(id)))) o.push(bundle(s, 'skin:' + id, [(t) => G.buySkin(t, id) && G.equipSkin(t, id)]));
+    for (const id of top(s.skins.filter((id) => id !== s.skin))) o.push(bundle(s, 'wear:' + id, [(t) => G.equipSkin(t, id)]));
+  }
   s.facs.forEach((f, i) => {
     for (const e of G.EXTENSIONS) {
       if (G.extensionLocked(s, e) || G.extensionMaxed(f, e)) continue;
@@ -96,7 +105,7 @@ function bestBuy(s) {
     const t = structuredClone(s);
     t.pts = Infinity;
     o.buy(t);
-    const gain = effectiveIncome(t) - base, payback = o.cost / gain;
+    const gain = effectiveIncome(t) - base, payback = Math.max(o.cost, 1e-9) / gain;
     if (gain > 0 && (!best || payback < best.payback)) best = { ...o, payback };
   }
   return best;
@@ -157,10 +166,12 @@ for (const [gi, goal] of G.GOALS.entries()) {
     }
     const tapping = tapIncome(s);
     G.earn(s, tapping);
+    s.stats.taps += TAPS; // for the skin unlocks
+    s.stats.lucky += TAPS * G.LUCK_CHANCE * s.own.luck;
     G.step(s, 1);
     t++;
     if (t % COLLECT === 0) s.facs.forEach((f, i) => { if (!f.kitOn && G.collect(s, i) > 0) phase().actions++; });
-    if (YARN && s.cat && t % YARN === 0) G.catchYarn(s);
+    if (YARN && s.cat && t % YARN === 0) { G.catchYarn(s); if (SKINS) G.markFeat(s, 'music'); }
     if (DAILY && G.careReady(s, 'day 1')) {
       for (const c of G.CARE_STEPS) G.doCare(s, 'day 1', c);
       stats.cares++;
@@ -175,7 +186,8 @@ for (const [gi, goal] of G.GOALS.entries()) {
   const mins = (t - start) / 60, p = phases[gi];
   p.gap = Math.max(p.gap, t - lastBuy); // the wait after the last purchase counts too
   log.push(`goal ${gi + 1} (${G.fmt(goal.at)}): ${mins.toFixed(1)} min, longest wait between purchases ${(p.gap / 60).toFixed(1)} min, ` +
-    `${(p.actions / mins).toFixed(1)} management actions/min, income at the end ${shares(s)}, ${s.facs.length} factories`);
+    `${(p.actions / mins).toFixed(1)} management actions/min, income at the end ${shares(s)}, ${s.facs.length} factories, ` +
+    `${Object.keys(s.released).length} skins released (${s.skins.length} owned, wearing ${s.skin})`);
   if (gi === 0) G.adoptCat(s);
   if (gi >= 1) G.checkGoal(s);
 }

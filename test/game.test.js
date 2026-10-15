@@ -155,19 +155,128 @@ test('the store opens once, when 10,000,000 is reached after adopting the cat', 
   assert.equal(s.storeOpen, true, 'stays open after spending');
 });
 
-test('skins and tracks cost points, can only be bought once, and must be owned to use', () => {
+test('the catalog has 100 / 50 / 20 / 8 / 3 / 1 skins per class, with unique ids and names', () => {
+  assert.deepEqual(G.CLASSES.map((c) => G.SKINS.filter((sk) => sk.cls === G.CLASSES.indexOf(c)).length), [100, 50, 20, 8, 3, 1]);
+  assert.equal(new Set(G.SKINS.map((sk) => sk.id)).size, G.SKINS.length);
+  assert.equal(new Set(G.SKINS.map((sk) => sk.name)).size, G.SKINS.length);
+  for (const id of ['classic', 'ginger', 'snow', 'midnight', 'tuxedo', 'royal']) assert.ok(G.SKINS.some((sk) => sk.id === id), id + ' kept for old saves');
+  // Bonuses grow with the class: the best of each class beats the best of the class below.
+  const best = G.CLASSES.map((c, i) => Math.max(...G.SKINS.filter((sk) => sk.cls === i).map((sk) => sk.bonus.reduce((a, b) => a + b.value, 0))));
+  for (let i = 1; i < best.length; i++) assert.ok(best[i] > best[i - 1], G.CLASSES[i].id);
+});
+
+test('skins are released when their condition is met, at a price fixed at release, then bought and worn', () => {
   const s = rich(3e6);
+  assert.equal(G.skinReleased(s, 'ginger'), false);
+  assert.equal(G.buySkin(s, 'ginger'), false, 'not released');
+  for (let i = 0; i < 150; i++) G.tap(s, () => 1); // ginger: tap 150 times
+  assert.deepEqual(G.releaseSkins(s).includes('ginger'), true);
+  assert.ok(s.fresh.includes('ginger'));
+  const price = G.skinPrice(s, 'ginger');
+  assert.ok(price >= G.CLASSES[0].floor);
   assert.equal(G.buySkin(s, 'ginger'), false, 'store closed');
   Object.assign(s, { cat: true, goalIdx: 1, storeOpen: true });
-  assert.equal(G.equipSkin(s, 'ginger'), false);
+  assert.equal(G.equipSkin(s, 'ginger'), false, 'must be owned');
+  const before = s.pts;
   assert.equal(G.buySkin(s, 'ginger'), true);
-  assert.equal(s.pts, 2e6);
+  assert.equal(s.pts, before - price);
   assert.equal(G.buySkin(s, 'ginger'), false, 'already owned');
+  const plain = G.tapGain(s);
   assert.equal(G.equipSkin(s, 'ginger'), true);
-  assert.equal(G.buyTrack(s, 'cruise'), true);
-  assert.equal(G.selectTrack(s, 'cruise'), true);
-  assert.equal(G.buyTrack(s, 'lullaby'), false, 'too expensive');
-  assert.equal(s.pts, 0);
+  assert.ok(Math.abs(G.tapGain(s) / plain - 1.05) < 1e-9, 'ginger: +5% taps');
+  G.seeSkins(s, ['ginger']);
+  assert.equal(s.fresh.includes('ginger'), false);
+});
+
+test('skin bonuses: cat, factories, all income, golden yarn, away', () => {
+  const s = rich(0);
+  Object.assign(s, { cat: true, goalIdx: 1, storeOpen: true });
+  G.buildFactory(Object.assign(s, { pts: 1e6 }));
+  const wear = (id) => { s.skins.push(id); G.equipSkin(s, id); };
+  const cat = G.catRate(s), fac = (G.syncCrew(s), G.factoryRate(s.facs[0])), all = G.perSec(s);
+  wear('tracks-1'); // +5% cat clicks
+  assert.ok(Math.abs(G.catRate(s) / cat - 1.05) < 1e-9);
+  wear('fac-1'); // +5% factories
+  assert.ok(Math.abs(G.factoryRate(s.facs[0]) / fac - 1.05) < 1e-9);
+  wear('ninelives'); // all +100%, away +200%
+  assert.ok(Math.abs(G.perSec(s) / all - 2) < 1e-9);
+  s.away = true;
+  assert.ok(Math.abs(G.perSec(s) / all - 6) < 1e-9);
+  s.away = false;
+  wear('goldenpaw'); // yarn +200%
+  G.catchYarn(s);
+  assert.equal(s.frenzy, G.FRENZY_SECONDS * 3);
+});
+
+test('feats: lucky streaks, purchase order, yarn streaks', () => {
+  const s = rich(1e12);
+  s.own.luck = 5;
+  G.tap(s, () => 0); G.tap(s, () => 0);
+  assert.ok(s.feats.includes('lucky2'));
+  assert.ok(!s.feats.includes('lucky3'));
+  G.tap(s, () => 1); G.tap(s, () => 0); G.tap(s, () => 0);
+  assert.ok(!s.feats.includes('lucky3'), 'a miss breaks the streak');
+  for (let i = 0; i < 5; i++) G.buildFactory(s);
+  for (const id of ['turbo', 'lines', 'silo']) G.buyExtension(s, 2, id);
+  assert.ok(s.feats.includes('combo'));
+  for (let i = 0; i < 5; i++) G.buyExtension(s, i, 'silo');
+  assert.ok(s.feats.includes('stairs'));
+  s.cat = true;
+  for (let i = 0; i < 9; i++) G.catchYarn(s);
+  G.missYarn(s);
+  G.catchYarn(s);
+  assert.ok(!s.feats.includes('yarn10'));
+  for (let i = 0; i < 9; i++) G.catchYarn(s);
+  assert.ok(s.feats.includes('yarn10'));
+});
+
+test('care streaks count days in a row', () => {
+  assert.equal(G.dayBefore('2026-03-01'), '2026-02-28');
+  assert.equal(G.dayBefore('2027-01-01'), '2026-12-31');
+  const s = rich(2e7);
+  G.buildFactory(s);
+  Object.assign(s, { cat: true, goalIdx: 1 });
+  G.checkGoal(s);
+  const care = (day) => G.CARE_STEPS.forEach((c) => G.doCare(s, day, c));
+  care('2026-10-10'); care('2026-10-11'); care('2026-10-12');
+  assert.equal(s.stats.streak, 3);
+  care('2026-10-14');
+  assert.equal(s.stats.streak, 1);
+  assert.equal(s.stats.streakMax, 3);
+  assert.equal(s.stats.happy, 4);
+});
+
+test('the code yumi unlocks every skin; unknown codes do nothing', () => {
+  const s = rich(0);
+  assert.equal(G.redeemCode(s, 'nope'), -1);
+  assert.equal(G.redeemCode(s, ' YUMI '), G.SKINS.length - 1);
+  assert.equal(s.skins.length, G.SKINS.length);
+  assert.ok(G.SKINS.every((sk) => G.skinReleased(s, sk.id)));
+  assert.equal(G.equipSkin(s, 'err'), true);
+  assert.equal(G.redeemCode(s, 'yumi'), 0);
+});
+
+test('the broken legendary needs every legendary', () => {
+  const s = rich(0);
+  s.skins.push('ninelives', 'collector');
+  assert.equal(G.releaseSkins(s).includes('err'), false);
+  s.skins.push('goldenpaw');
+  assert.equal(G.releaseSkins(s).includes('err'), true);
+});
+
+test('stats, feats and released skins survive a save; owned skins from old saves count as released', () => {
+  const s = rich(1e6);
+  for (let i = 0; i < 60; i++) G.tap(s, () => 1);
+  G.markFeat(s, 'music');
+  G.releaseSkins(s);
+  const t = G.deserialize(JSON.parse(JSON.stringify(G.serialize(s))));
+  assert.equal(t.stats.taps, 60);
+  assert.deepEqual(t.feats, ['music']);
+  assert.deepEqual(t.released, s.released);
+  assert.deepEqual(t.fresh, s.fresh);
+  const old = G.deserialize({ v: 1, cat: true, goalIdx: 2, storeOpen: true, skins: ['royal'], skin: 'royal' });
+  assert.equal(old.skin, 'royal');
+  assert.equal(G.skinReleased(old, 'royal'), true);
 });
 
 test('saved cosmetics are validated', () => {
