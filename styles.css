@@ -365,6 +365,17 @@ button:focus-visible { outline: 2px dashed var(--amber); outline-offset: 3px; }
 .game-panel h3 { margin: 0; text-align: center; font-family: var(--pixel); font-weight: 400; font-size: 34px; line-height: 1; color: var(--amber); }
 .game-panel .ds { margin: 0; text-align: center; }
 
+/* Contracts and the Lab */
+.con-active .line { display: flex; justify-content: space-between; align-items: baseline; }
+.con-active .vt { font-size: 26px; line-height: 1; color: var(--amber); }
+.con-active .need { display: grid; grid-template-columns: 64px minmax(0, 1fr); align-items: center; gap: 8px; font-size: 10px; letter-spacing: .1em; color: var(--amber); }
+.con-active .meter { display: block; height: 10px; border: 1px solid var(--rule-2); }
+.con-active .meter span { display: block; height: 100%; background: var(--amber); }
+.con-active .back { min-height: 40px; }
+.row.weekly { border-color: #C77DFF; }
+.row.weekly .nm { color: #C77DFF; }
+.lab-row-title { margin: 6px 0 -4px; font-size: 11px; letter-spacing: .14em; color: var(--dim); }
+
 /* Boxes */
 .box-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .box {

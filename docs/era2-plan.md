@@ -131,6 +131,21 @@ The balance sim needs a model of badges per hour for each wing before levels 4�
   3 plays, one back every 20 min. Every 2 points scored is a ticket; prizes: golden spool 15, blueprint 30, free
   wooden crate 50. Badges: score 10 in any game, 16 in Conveyor sort, 30 in Yarn rush. (A bot that taps every
   glitch scores ~22 in Conveyor sort.) The weekly cup waits for the league.
-- **Badge needs** with two wings built (6 badges): levels 4–8 need 1 / 2 / 3 / 5 / 6.
-- **Pacing** (sim: up to 3 underlings away, every arcade play used, scores 15–39): levels 4–8 take about
-  15 / 16 / 13 / 20 / 60 min; a slower player 20 / 20 / 20 / 23 / 37. Level 8 waits for the last badge.
+- **Contracts (step 4, built):** opens at level 4. A board of 3 offers (strike, blackout, rush, each Normal,
+  Hard or Expert from the save's seed) that changes every 4 hours, plus a **weekly contract** made from the week
+  number only, so it's the same for every player (Expert, double tokens). A contract lasts 10 min of game time;
+  the target is a share of 10 min of income at the start (strike 90%, blackout 60%, rush 125%, ×1 / 1.15 / 1.3
+  by level). Strike: factories ×0.5, taps ×4. Blackout: factories off for the first 5 min. Done the moment the
+  target is reached; one at a time; each offer once. Pays 3 / 5 / 8 paw tokens (weekly ×2). Badges: finish 1,
+  finish one of each twist, finish 10. The main screen's crew strip shows a running contract.
+- **Lab (step 5, built):** opens at level 5. Nine research items in three rows (3 / 6 / 10 paw tokens); a row
+  opens with two items from the row above: Training manuals (XP ×1.5), Yarn magnet (yarn every 3.6–6 min),
+  Extra coin slot (4 plays, 15 min refill); Self-promotion, Spool rack (10 spools), Bigger crates (30 min);
+  Night-shift autopilot, Golden thread (yarn ×6), Crew coaching (kitten-run factories ×1.25). Paw tokens: contracts,
+  +2 per badge, +5 per finished quest. Badges: research 2 / 5 / 9.
+- **Badge needs** with all four wings: levels 4–8 need 1 / 2 / 4 / 6 / 8 of 12.
+- **Pacing** (sim: night shifts, every arcade play, a contract whenever none runs, research when affordable):
+  levels 4–8 take about 15 / 20 / 11 / 16 / 4 min; a slower player 20 / 27 / 13 / 15 / 15. The sim wins every
+  contract it takes (it taps 2–5 times a second all the time), so contract targets may need raising after
+  play-testing.
+- **Still to do:** the friends league backend (step 7). The weekly contract and the event log are ready for it.

@@ -42,16 +42,18 @@ flowchart TD
   HQ --> NIGHT["EXPEDITIONS<br/>night shift: silo, fields, server room, roof<br/>side-quests: the lost blueprint, the smugglers"]:::opens
   SUBS --> NIGHT
   NIGHT -- "first badge" --> ARC["ARCADE<br/>Conveyor sort, Yarn rush<br/>3 plays, tickets, prizes"]:::opens
-  HQ -.-> CON["CONTRACTS · soon"]:::future
-  HQ -.-> LABW["LAB · soon"]:::future
+  L4 --> CON["CONTRACTS (level 4)<br/>strike, blackout, rush + weekly<br/>pays paw tokens"]:::opens
+  L5 --> LABW["LAB (level 5)<br/>9 research items for paw tokens<br/>automation, upgrades"]:::opens
+  CON --> L6
+  LABW --> L6
 
   NIGHT --> L4
   ARC --> L4
   L4{{"LEVEL 4 · 1B + 1 badge · ~15 min<br/>all income +50%"}}:::level
-  L4 --> L5{{"LEVEL 5 · 10B + 2 badges · ~16 min<br/>+50%"}}:::level
-  L5 --> L6{{"LEVEL 6 · 100B + 3 badges · ~13 min<br/>+50%"}}:::level
-  L6 --> L7{{"LEVEL 7 · 1T + 5 badges · ~20 min<br/>+50%"}}:::level
-  L7 --> L8{{"LEVEL 8 · 10T + 6 badges · ~60 min<br/>+50% · end of era 2"}}:::level
+  L4 --> L5{{"LEVEL 5 · 10B + 2 badges · ~20 min<br/>+50%"}}:::level
+  L5 --> L6{{"LEVEL 6 · 100B + 4 badges · ~11 min<br/>+50%"}}:::level
+  L6 --> L7{{"LEVEL 7 · 1T + 6 badges · ~16 min<br/>+50%"}}:::level
+  L7 --> L8{{"LEVEL 8 · 10T + 8 badges · ~4 min<br/>+50% · end of era 2"}}:::weak
   L8 --> ERA3(["ERA 3 · SOON<br/>(not designed yet)"]):::future
 
   subgraph ALONG ["Runs alongside every level"]
@@ -83,21 +85,24 @@ What brings the player back, on each timescale. Gaps are where the game "just si
 | --- | --- | --- |
 | Seconds | Tapping, lucky clicks, Power tap | Start |
 | ~1 minute | Collecting silos (until kittens run the factories) | First factory |
-| Minutes | Buying upgrades and extensions, promotions, underlings, boxes | Start / L2 / L3 |
+| Minutes | Buying upgrades and extensions, promotions, underlings, boxes, research | Start / L2 / L3 / L5 |
+| 10 minutes | A contract | L4 |
 | 6–10 minutes | Golden yarn rolls past | L1 |
 | 20 min | An arcade play comes back | First badge |
 | 30 min – 4 h | Night shift: the old silo, the catnip fields, the roof; side-quest steps | L3 |
 | 1 hour | Happy crew from care time runs out | L2 |
+| 4 hours | The contract board changes | L4 |
 | 8 hours | Night shift: the server room; offline progress cap | L3 / start |
 | A day | Care time; skin unlocks for care days and streaks | L2 |
+| A week | The weekly contract (the same for every player) | L4 |
 | Days to weeks | The rarest skins (9-day care streak, 200 yarns, 100 skins owned) | — |
 
 ## Known weak spots
 
 - **Level 3 is short (~6 min)**: care time at 10M doubles the crew for an hour, which carries straight through it.
 - **Level 2 (~9 min)** leans almost entirely on the cat.
-- **Level 8 waits about an hour** for the last badge (10 night shifts or 30 in Yarn rush): fine as a finale,
-  but points pile up meanwhile.
+- **Level 8 is short (~4 min)** now that four wings feed badges and the Lab speeds things up.
+- **Contracts may be too easy**: the sim wins every one it takes.
 - After level 8 nothing new arrives ("ERA 3 · SOON").
 - **Spending competes with levels**: levels check the points you hold, so boxes, skins and promotions all delay
   the next level.

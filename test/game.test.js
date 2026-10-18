@@ -323,7 +323,7 @@ test('box upgrades add to the worn skin bonus', () => {
 });
 
 test('era 2: badges come from the wings in order, levels 4-8 need them, capped at what is built', () => {
-  assert.deepEqual([3, 4, 5, 6, 7].map(G.badgeNeed), [1, 2, 3, 5, 6], 'Expeditions and the Arcade are built: 6 badges');
+  assert.deepEqual([3, 4, 5, 6, 7].map(G.badgeNeed), [1, 2, 4, 6, 8], 'all four wings are built: 12 badges');
   const s = rich(1e9);
   for (let i = 0; i < 5; i++) G.buildFactory(s);
   Object.assign(s, { cat: true, goalIdx: 1, pts: 1e9 });
@@ -423,6 +423,84 @@ test('arcade: plays refill over time, scores pay tickets, tickets buy prizes, be
   assert.deepEqual(t.arcade, s.arcade);
 });
 
+// A player at level 4 with five kitten-run factories.
+function era2Game() {
+  const s = rich(1e9);
+  for (let i = 0; i < 5; i++) G.buildFactory(s);
+  Object.assign(s, { cat: true, goalIdx: 1, pts: 1e9 });
+  G.checkGoal(s); G.checkGoal(s);
+  s.crew.forEach((k, n) => { k.fac = n; });
+  while (s.crew.length < 5) { s.pts = 1e12; G.hireKitten(s, s.crew.length); }
+  s.stats.sent = 1;
+  G.checkBadges(s);
+  G.checkGoal(s);
+  assert.equal(s.goalIdx, 4);
+  return s;
+}
+
+test('contracts: a board per 4 hours plus a weekly one; twists change the economy; finishing pays tokens', () => {
+  const s = era2Game(), now = Date.UTC(2026, 9, 15, 12);
+  const offers = G.conOffers(s, now);
+  assert.equal(offers.length, 4);
+  assert.deepEqual(offers.slice(0, 3).map((o) => o.kind), [0, 1, 2], 'one of each twist');
+  assert.equal(offers[3].weekly, true);
+  assert.deepEqual(G.conOffers(G.newGame(), now)[3], offers[3], 'the weekly contract is the same for everyone');
+  assert.deepEqual(G.conOffers(s, now + 3600e3), offers, 'the board holds for 4 hours');
+  assert.notEqual(G.conOffers(s, now + 5 * 3600e3)[0].key, offers[0].key);
+  G.syncCrew(s);
+  const fac = G.factoryRate(s.facs[0]), tap = G.tapGain(s);
+  assert.equal(G.startContract(s, offers[0].key, now), true, 'a strike');
+  assert.equal(G.startContract(s, offers[1].key, now), false, 'one at a time');
+  assert.ok(Math.abs(G.factoryRate(s.facs[0]) / fac - 0.5) < 1e-9, 'factories at half speed');
+  assert.ok(Math.abs(G.tapGain(s) / tap - 4) < 0.05, 'taps ×4');
+  const tokens = s.lab.tokens;
+  G.earn(s, s.con.active.target);
+  G.step(s, 1);
+  assert.equal(s.con.active, null, 'done as soon as the target is earned');
+  assert.equal(s.con.result.ok, true);
+  assert.equal(s.lab.tokens - tokens >= G.conTokens(offers[0]), true);
+  assert.equal(G.startContract(s, offers[0].key, now), false, 'each offer once');
+  assert.equal(G.startContract(s, offers[1].key, now), true, 'a blackout');
+  G.syncCrew(s);
+  assert.equal(G.factoryRate(s.facs[0]), 0, 'factories stop for the first half');
+  G.step(s, G.CON_SECS / 2 + 1);
+  if (s.con.active) assert.ok(G.factoryRate(s.facs[0]) > 0, 'then they start again');
+  G.step(s, G.CON_SECS);
+  assert.equal(s.con.active, null, 'over when time runs out');
+  assert.equal(G.wingBadges(s, G.WINGS[2]) >= 1, true, 'bronze: a finished contract');
+});
+
+test('lab: rows open two at a time, research costs tokens and changes the rules', () => {
+  const s = era2Game();
+  s.pts = 1e12; s.goalIdx = 5;
+  const xp = G.LAB.find((x) => x.id === 'xp');
+  s.lab.tokens = 100;
+  assert.equal(G.research(s, 'promote'), false, 'row 2 needs two of row 1');
+  assert.equal(G.research(s, 'slot'), true);
+  assert.equal(G.playsMax(s), G.PLAYS_MAX + 1);
+  assert.equal(G.research(s, 'xp'), true);
+  assert.equal(G.research(s, 'xp'), false, 'once');
+  assert.equal(s.lab.tokens, 100 - 2 * xp.cost);
+  assert.equal(G.research(s, 'spools'), true);
+  assert.equal(G.spoolCap(s), 10);
+  assert.equal(G.research(s, 'crates'), true);
+  assert.equal(G.research(s, 'frenzy'), true);
+  assert.equal(G.frenzyMult(s), 6);
+  assert.equal(G.research(s, 'promote'), true);
+  const k = s.crew[0];
+  k.xp = G.xpNeed(k);
+  const lvl = G.kittenLevel(k);
+  G.step(s, 0.1);
+  assert.equal(G.kittenLevel(k), lvl + 1, 'self-promotion');
+  const t = G.deserialize(JSON.parse(JSON.stringify(G.serialize(s))));
+  assert.deepEqual(t.lab, s.lab);
+});
+
+test('badges and quests pay paw tokens', () => {
+  const s = era2Game();
+  assert.equal(s.lab.tokens, G.TOKENS_BADGE, 'the one badge so far');
+});
+
 test('the code yumi unlocks every skin; unknown codes do nothing', () => {
   const s = rich(0);
   assert.equal(G.redeemCode(s, 'nope'), -1);
@@ -481,7 +559,9 @@ test('the levels go ×10 from 1M to 10T; 100M opens underlings and later levels 
   s.pts = 1e9;
   assert.equal(G.checkGoal(s), -1, 'level 4 also needs a badge');
   s.badges.exp = 3;
-  s.badges.arc = 3; // every badge that can be earned today
+  s.badges.arc = 3;
+  s.badges.con = 3;
+  s.badges.lab = 3;
   assert.equal(G.checkGoal(s), 3);
   assert.equal(G.levelBonus(s), G.LEVEL_BONUS);
   for (let i = 4; i < G.GOALS.length; i++) { s.pts = G.GOALS[i].at; assert.equal(G.checkGoal(s), i); }

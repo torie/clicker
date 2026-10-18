@@ -1,5 +1,5 @@
 // Simulates a greedy player against the real rules in src/game.js, to tune prices.
-// Run: node scripts/balance-sim.mjs [--skins 1] [--trips 1] [--arcade 1] [--taps 5] [--collect 20] [--daily 1] [--yarn 480] [--worth 300] [--seed 1] [--trace] [--load SAVE.json]
+// Run: node scripts/balance-sim.mjs [--skins 1] [--trips 1] [--arcade 1] [--contracts 1] [--taps 5] [--collect 20] [--daily 1] [--yarn 480] [--worth 300] [--seed 1] [--trace] [--load SAVE.json]
 //   [--save-at 950000 --save-to test/presets/precat.json]  (--trace lists every purchase; --save-at writes the
 //   save the first time the balance reaches that many points, for play-testing from that point)
 //
@@ -19,7 +19,7 @@ const arg = (name, d) => {
 const TRACE = process.argv.includes('--trace');
 // Like a real player, buys anything that pays for itself within WORTH seconds even when saving for the goal would be quicker.
 const WORTH = arg('worth', 300);
-const SKINS = arg('skins', 1), TRIPS = arg('trips', 1), ARCADE = arg('arcade', 1);
+const SKINS = arg('skins', 1), TRIPS = arg('trips', 1), ARCADE = arg('arcade', 1), CONTRACTS = arg('contracts', 1);
 const TAPS = arg('taps', 5), COLLECT = arg('collect', 20), DAILY = arg('daily', 1), YARN = arg('yarn', 480), LIMIT = arg('limit', 8 * 3600);
 const SAVE_AT = arg('save-at', 0), SAVE_TO = process.argv[process.argv.indexOf('--save-to') + 1];
 const LOAD = process.argv.includes('--load') ? process.argv[process.argv.indexOf('--load') + 1] : null;
@@ -133,7 +133,7 @@ function arrange(s) {
 }
 
 // --load starts from a save (e.g. a preset) instead of a new game, at that save's level.
-const s = LOAD ? G.deserialize(JSON.parse(readFileSync(LOAD, 'utf8'))) : G.newGame(), log = [], stats = { moves: 0, cares: 0, trips: 0, games: 0 };
+const s = LOAD ? G.deserialize(JSON.parse(readFileSync(LOAD, 'utf8'))) : G.newGame(), log = [], stats = { moves: 0, cares: 0, trips: 0, games: 0, contracts: 0 };
 if (!LOAD) s.seed = arg('seed', 1);
 // Management effort per goal: collecting a silo or caring for a kitten each count as one action.
 const phases = G.GOALS.map(() => ({ actions: 0, gap: 0 }));
@@ -187,6 +187,13 @@ for (const [gi, goal] of G.GOALS.entries()) {
       G.finishGame(s, G.ARCADE_GAMES[stats.games % 2].id, 15 + (stats.games * 7919) % 25);
       stats.games++;
     }
+    // Contracts: takes the first open offer whenever none is running. Lab: researches whatever it can afford.
+    if (CONTRACTS && !s.con.active) {
+      const o = G.conOffers(s, t * 1000).find((x) => !s.con.done.includes(x.key));
+      if (o && G.startContract(s, o.key, t * 1000)) stats.contracts++;
+    }
+    for (const x of G.LAB) G.research(s, x.id);
+    G.autoTrips(s, t * 1000);
     if (DAILY && G.careReady(s, 'day 1')) {
       for (const c of G.CARE_STEPS) G.doCare(s, 'day 1', c);
       stats.cares++;
@@ -209,5 +216,5 @@ for (const [gi, goal] of G.GOALS.entries()) {
 console.log(`taps ${TAPS}/s, collect every ${COLLECT}s, ${DAILY ? 'does' : 'skips'} care time`);
 console.log(log.join('\n'));
 console.log(`crew after 10M: ${s.crew.map((k) => `${k.name} L${G.kittenLevel(k)}+${(k.subs || []).length} (${k.trait}, loves #${k.fav + 1}) at #${k.fac + 1} ×${G.kittenBoost(s, k, k.fac).toFixed(1)}`).join(', ')}; ` +
-  `${stats.moves} moves, care time ${stats.cares}×, ${stats.trips} night shifts, ${stats.games} arcade games, badges ${G.badgeCount(s)}`);
+  `${stats.moves} moves, care time ${stats.cares}×, ${stats.trips} night shifts, ${stats.games} arcade games, ${stats.contracts} contracts (${s.stats.contracts} won), research ${s.lab.done.length}, badges ${G.badgeCount(s)}`);
 console.log('final:', JSON.stringify({ own: s.own, facs: s.facs.map(({ lines, turbo, silo, kit }) => [lines, turbo, silo, kit].join('')) }));

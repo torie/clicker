@@ -68,8 +68,12 @@ export const WINGS = [
   {id: 'arc', name: 'Arcade', desc: 'Mini-games for tickets and prizes', built: true, opensAt: 3, opensText: 'your first badge',
     badges: [{k: 'arcBest', at: 10, text: 'Score 10 in any arcade game'}, {k: 'sortBest', at: 16, text: 'Score 16 in Conveyor sort'},
       {k: 'rushBest', at: 30, text: 'Score 30 in Yarn rush'}]},
-  {id: 'con', name: 'Contracts', desc: 'Timed goals with a twist', built: false, opensAt: 4, opensText: 'level 4'},
-  {id: 'lab', name: 'Lab', desc: 'Research perks and automation', built: false, opensAt: 5, opensText: 'level 5'}
+  {id: 'con', name: 'Contracts', desc: 'Timed goals with a twist, for paw tokens', built: true, opensAt: 4, opensText: 'level 4',
+    badges: [{k: 'contracts', at: 1, text: 'Finish a contract'}, {k: 'conKinds', at: 3, text: 'Finish a strike, a blackout and a rush'},
+      {k: 'contracts', at: 10, text: 'Finish 10 contracts'}]},
+  {id: 'lab', name: 'Lab', desc: 'Research automation and upgrades with paw tokens', built: true, opensAt: 5, opensText: 'level 5',
+    badges: [{k: 'research', at: 2, text: 'Research 2 things'}, {k: 'research', at: 5, text: 'Research 5 things'},
+      {k: 'research', at: 9, text: 'Research everything'}]}
 ];      // ×1.5 to all income for every level from 4 on (keep the teasers in step)
 
 // Golden yarn: after the cat arrives it sometimes rolls past (the UI decides when). Catching it
@@ -194,6 +198,43 @@ export const PRIZES = [
 ];
 export const ticketsFor = (score) => Math.floor(Math.max(0, score) / 2);
 
+// The Contracts wing (from level 4): a board of 3 offers (one per twist) that refreshes every 4 hours, plus a
+// weekly contract that is the same for every player (its twist and target come from the week number, so
+// friends can compare later). A contract runs for CON_SECS of game time; the goal is to earn `target`, a
+// multiple of the income when it starts. Done early counts too. Finishing pays paw tokens, the Lab's currency.
+export const CON_SECS = 600;
+export const BOARD_SECS = 4 * 3600;
+export const CON_KINDS = [
+  {id: 'strike', name: 'Strike', twist: 'Factories run at half speed, but every tap is worth ×4', factor: 0.9},
+  {id: 'blackout', name: 'Blackout', twist: 'Factories stop for the first half', factor: 0.6},
+  {id: 'rush', name: 'Rush', twist: 'No twist, just a bigger target', factor: 1.25}
+];
+export const CON_LEVELS = [{name: 'Normal', mult: 1, tokens: 3}, {name: 'Hard', mult: 1.15, tokens: 5}, {name: 'Expert', mult: 1.3, tokens: 8}];
+const WEEK_MS = 7 * 24 * 3600 * 1000;
+const WEEK0 = Date.UTC(2026, 0, 5);  // a Monday
+
+// The Lab (from level 5): research for paw tokens. A row opens once 2 of the row above are researched.
+// Paw tokens come from contracts, badges (TOKENS_BADGE each) and finished quests (TOKENS_QUEST).
+export const TOKENS_BADGE = 2;
+export const TOKENS_QUEST = 5;
+export const LAB = [
+  {id: 'xp', row: 0, cost: 3, name: 'Training manuals', desc: 'Kitten XP ×1.5'},
+  {id: 'magnet', row: 0, cost: 3, name: 'Yarn magnet', desc: 'The golden yarn rolls by more often'},
+  {id: 'slot', row: 0, cost: 3, name: 'Extra coin slot', desc: 'Arcade: 4 plays, one back every 15 min'},
+  {id: 'promote', row: 1, cost: 6, name: 'Self-promotion', desc: 'Kittens promote themselves when their XP is full and you can pay'},
+  {id: 'spools', row: 1, cost: 6, name: 'Spool rack', desc: 'Hold up to 10 golden spools'},
+  {id: 'crates', row: 1, cost: 6, name: 'Bigger crates', desc: 'Night-shift crates hold 30 min of income'},
+  {id: 'autotrip', row: 2, cost: 10, name: 'Night-shift autopilot', desc: 'Underlings back from a trip open their loot and go again'},
+  {id: 'frenzy', row: 2, cost: 10, name: 'Golden thread', desc: 'Golden yarn and spools: ×6 instead of ×5'},
+  {id: 'crew', row: 2, cost: 10, name: 'Crew coaching', desc: 'Kitten-run factories ×1.25'}
+];
+export const labHas = (s, id) => s.lab.done.includes(id);
+export const frenzyMult = (s) => FRENZY_MULT + (labHas(s, 'frenzy') ? 1 : 0);
+export const spoolCap = (s) => (labHas(s, 'spools') ? 10 : MAX_SPOOLS);
+export const playsMax = (s) => PLAYS_MAX + (labHas(s, 'slot') ? 1 : 0);
+export const playRefill = (s) => (labHas(s, 'slot') ? 900 : PLAY_REFILL);
+export const crateSecs = (s) => (labHas(s, 'crates') ? 1800 : CRATE_SECS);
+
 // The player's profile and an event log for the friends league (built later). `test` marks a save that used
 // a play-test code or preset: it won't count in the league.
 const newId = () => Array.from({length: 8}, () => '0123456789ABCDEF'[Math.floor(Math.random() * 16)]).join('');
@@ -205,12 +246,13 @@ export function newGame() {
     seed: Math.floor(Math.random() * 2 ** 31), rolls: 0, skins: ['classic'], skin: 'classic', tracks: ['silo'], track: 'silo', savedAt: Date.now(),
     stats: newStats(), feats: [], log: [], released: {classic: 0}, fresh: [],
     badges: {}, profile: {id: newId(), name: ''}, events: [], test: false, quest: {i: 0, step: 0},
-    arcade: {plays: PLAYS_MAX, at: 0, tickets: 0, best: {}}};
+    arcade: {plays: PLAYS_MAX, at: 0, tickets: 0, best: {}},
+    con: {active: null, done: [], kinds: [], result: null}, lab: {tokens: 0, done: []}};
 }
 
 // Counters behind the skin unlocks. `play` is seconds of active play; the *Run ones are current streaks.
 const STAT_KEYS = ['taps', 'lucky', 'play', 'collects', 'upg', 'ext', 'yarn', 'ftaps', 'care', 'happy', 'streak', 'streakMax',
-  'promos', 'moves', 'back', 'luckyRun', 'yarnRun', 'burst', 'trips', 'boxes', 'tripsLong', 'quests', 'games', 'sent'];
+  'promos', 'moves', 'back', 'luckyRun', 'yarnRun', 'burst', 'trips', 'boxes', 'tripsLong', 'quests', 'games', 'sent', 'contracts'];
 const newStats = () => Object.fromEntries(STAT_KEYS.map((k) => [k, 0]));
 
 export function newFactory(i) {
@@ -227,11 +269,11 @@ export const catClicks = (s) => (s.cat ? (CAT_CPS + CAT_TRAIN * s.own.train) * (
 export const catRate = (s) => catClicks(s) * perClick(s);
 /** Everything earned is multiplied by the level bonus and, while it lasts, the golden yarn frenzy. */
 export const levelBonus = (s) => Math.pow(LEVEL_BONUS, Math.max(0, s.goalIdx - 3));
-export const gainMult = (s) => levelBonus(s) * (s.frenzy > 0 ? FRENZY_MULT : 1) * (1 + bonus(s, 'all')) * (s.away ? 1 + bonus(s, 'away') : 1);
+export const gainMult = (s) => levelBonus(s) * (s.frenzy > 0 ? frenzyMult(s) : 1) * (1 + bonus(s, 'all')) * (s.away ? 1 + bonus(s, 'away') : 1);
 export const perSec = (s) => (s.own.auto + catRate(s)) * gainMult(s);
 export const lineRate = (f) => LINE_RATE * Math.pow(TIER_OUT, f.i) * Math.pow(2, f.turbo) * Math.pow(BP_STEP, f.bp || 0);
 /** `kitOn` and `boost` are set by syncCrew while a kitten runs the factory; `gm` is gainMult. */
-export const factoryRate = (f) => f.lines * lineRate(f) * (f.kitOn ? f.boost : 1) * (f.gm || 1);
+export const factoryRate = (f) => f.lines * lineRate(f) * (f.kitOn ? f.boost : 1) * (f.gm ?? 1);
 export const siloCap = (f) => SILO_BASE * Math.pow(TIER_OUT, f.i) * Math.pow(2, f.silo);
 
 // ---------- kitten crew ----------
@@ -289,7 +331,7 @@ export function syncCrew(s) {
     const k = crewOn(s) && kittenAt(s, i);
     f.kitOn = k ? true : undefined;
     f.boost = k ? kittenBoost(s, k, i) : undefined;
-    f.gm = gm * (1 + bonus(s, 'factory'));
+    f.gm = gm * (1 + bonus(s, 'factory')) * (k && labHas(s, 'crew') ? 1.25 : 1) * conFactory(s);
   });
 }
 
@@ -342,7 +384,7 @@ export function promoteKitten(s, n) {
 
 /** Fills every kitten's XP bar (it stops at full until the kitten is promoted). */
 function tickXp(s, dt) {
-  const m = 1 + bonus(s, 'xp');
+  const m = (1 + bonus(s, 'xp')) * (labHas(s, 'xp') ? 1.5 : 1);
   for (const k of s.crew) k.xp = Math.min(xpNeed(k), (k.xp || 0) + xpRate(k) * m * dt);
 }
 
@@ -383,7 +425,7 @@ export function questNow(s) {
   return q ? {q, i: s.quest.i, step: q.steps[s.quest.step], n: s.quest.step} : null;
 }
 function questReward(s, r) {
-  if (r.spools) s.spools = Math.min(MAX_SPOOLS, s.spools + r.spools);
+  if (r.spools) s.spools = Math.min(spoolCap(s), s.spools + r.spools);
   if (r.bp && s.facs.length) for (let i = 0; i < r.bp; i++) { const f = s.facs[Math.floor(rand(s) * s.facs.length)]; f.bp = (f.bp || 0) + 1; }
   if (r.bpAll) for (const f of s.facs) f.bp = (f.bp || 0) + r.bpAll;
   if (r.part) s.parts[r.part[0]] = (s.parts[r.part[0]] || 0) + r.part[1];
@@ -405,6 +447,7 @@ function questTrip(s, t) {
     out.push({id: 'quest', text: 'QUEST COMPLETE · ' + now.step.last});
     s.quest = {i: now.i + 1, step: 0};
     s.stats.quests++;
+    s.lab.tokens += TOKENS_QUEST;
     logEvent(s, 'quest', now.q.id);
   }
   return out;
@@ -436,12 +479,12 @@ export function openTrip(s, n, j, now) {
   for (let i = 0; i < TRIPS[t].items; i++) {
     const l = rollLoot(s, t);
     if (l.id === 'crate') {
-      const g = Math.ceil(CRATE_SECS * income(s) / (s.frenzy > 0 ? FRENZY_MULT : 1));
+      const g = Math.ceil(crateSecs(s) * income(s) / (s.frenzy > 0 ? frenzyMult(s) : 1));
       earn(s, g);
       out.push({id: 'crate', text: 'CRATE OF CLICKS · +' + fmt(g)});
-    } else if (l.id === 'spool' && s.spools < MAX_SPOOLS) {
+    } else if (l.id === 'spool' && s.spools < spoolCap(s)) {
       s.spools++;
-      out.push({id: 'spool', text: 'GOLDEN SPOOL · USE IT FOR A YARN ×' + FRENZY_MULT + ' ANY TIME'});
+      out.push({id: 'spool', text: 'GOLDEN SPOOL · USE IT FOR A YARN ×' + frenzyMult(s) + ' ANY TIME'});
     } else if (l.id === 'treat' || l.id === 'spool') { // spools are full: a treat instead
       k.xp = xpNeed(k);
       out.push({id: 'treat', text: 'TREAT · ' + k.name.toUpperCase() + '\'S XP BAR IS FULL'});
@@ -557,13 +600,15 @@ export function step(s, dt) {
   if (s.frenzy > 0) s.frenzy = Math.max(0, s.frenzy - dt);
   if (crewOn(s)) tickXp(s, dt);
   if (!s.away) s.stats.play += dt;
+  tickContract(s, dt);
+  if (labHas(s, 'promote')) s.crew.forEach((k, n) => { if (canPromote(k) && s.pts >= promoteCost(s, k)) promoteKitten(s, n); });
   releaseSkins(s);
   checkBadges(s);
 }
 
 /** Power tap's part of every tap: a share of the income per second. Lucky clicks don't multiply it. */
 export const powerGain = (s) => s.own.power * POWER_SHARE * income(s);
-export const tapMult = (s) => 1 + bonus(s, 'tap');
+export const tapMult = (s) => (1 + bonus(s, 'tap')) * (conTwist(s) === 'strike' ? 4 : 1);
 export const tapGain = (s) => (perClick(s) * gainMult(s) + powerGain(s)) * tapMult(s);
 export const luckMult = (s) => LUCK_MULT * (1 + bonus(s, 'luck'));
 
@@ -684,6 +729,7 @@ export function checkBadges(s) {
   for (const w of WINGS) {
     for (let b = nextBadge(s, w); b && wingOpen(s, w) && b.progress >= 1; b = nextBadge(s, w)) {
       s.badges[w.id] = b.tier + 1;
+      s.lab.tokens += TOKENS_BADGE;
       logEvent(s, 'badge', w.id + ':' + b.tier);
       out.push({wing: w, tier: b.tier});
     }
@@ -696,20 +742,21 @@ export function checkBadges(s) {
 /** Plays come back one every PLAY_REFILL seconds, up to PLAYS_MAX. `now` is the wall clock in ms. */
 export function refillPlays(s, now) {
   const a = s.arcade;
-  if (a.plays >= PLAYS_MAX) { a.at = now; return a.plays; }
-  const n = Math.floor((now - a.at) / (PLAY_REFILL * 1000));
+  const max = playsMax(s), refill = playRefill(s) * 1000;
+  if (a.plays >= max) { a.at = now; return a.plays; }
+  const n = Math.floor((now - a.at) / refill);
   if (n > 0) {
-    a.plays = Math.min(PLAYS_MAX, a.plays + n);
-    a.at = a.plays >= PLAYS_MAX ? now : a.at + n * PLAY_REFILL * 1000;
+    a.plays = Math.min(max, a.plays + n);
+    a.at = a.plays >= max ? now : a.at + n * refill;
   }
   return a.plays;
 }
 /** Seconds until the next play comes back (0 when full). */
-export const nextPlayIn = (s, now) => (s.arcade.plays >= PLAYS_MAX ? 0 : Math.max(0, (s.arcade.at + PLAY_REFILL * 1000 - now) / 1000));
+export const nextPlayIn = (s, now) => (s.arcade.plays >= playsMax(s) ? 0 : Math.max(0, (s.arcade.at + playRefill(s) * 1000 - now) / 1000));
 /** Uses a play to start a game. */
 export function startGame(s, id, now) {
   if (!wingOpen(s, WINGS[1]) || !ARCADE_GAMES.some((g) => g.id === id) || refillPlays(s, now) < 1) return false;
-  if (s.arcade.plays === PLAYS_MAX) s.arcade.at = now;
+  if (s.arcade.plays >= playsMax(s)) s.arcade.at = now;
   s.arcade.plays--;
   return true;
 }
@@ -727,7 +774,7 @@ export function finishGame(s, id, score) {
 /** Buys a prize with tickets. Returns the loot lines, or null. */
 export function buyPrize(s, id) {
   const p = PRIZES.find((x) => x.id === id);
-  if (!p || s.arcade.tickets < p.cost || (id === 'spool' && (!s.cat || s.spools >= MAX_SPOOLS)) || (id === 'bp' && !s.facs.length)) return null;
+  if (!p || s.arcade.tickets < p.cost || (id === 'spool' && (!s.cat || s.spools >= spoolCap(s))) || (id === 'bp' && !s.facs.length)) return null;
   s.arcade.tickets -= p.cost;
   if (id === 'spool') { s.spools++; return [{cls: 0, text: 'A GOLDEN SPOOL'}]; }
   if (id === 'bp') {
@@ -740,6 +787,107 @@ export function buyPrize(s, id) {
   for (let n = 0; n < b.items; n++) out.push(boxItem(s, rollWeighted(s, b.odds)));
   syncCrew(s);
   return out.sort((a, z) => z.cls - a.cls);
+}
+
+// ---------- era 2: Contracts ----------
+
+/** A small seeded random number for the board, so the same period always offers the same contracts. */
+function hash(...xs) {
+  let h = 2166136261;
+  for (const x of xs) h = Math.imul(h ^ (x | 0), 16777619) >>> 0;
+  h = Math.imul(h ^ (h >>> 15), h | 1);
+  return ((h ^ (h >>> 14)) >>> 0) / 4294967296;
+}
+export const weekNo = (now) => Math.floor((now - WEEK0) / WEEK_MS);
+/** The offers on the board at time `now`: one per twist with a level from the save's seed, plus the weekly
+ *  contract (from the week number only, the same for everyone). Each: {key, kind, level, weekly}. */
+export function conOffers(s, now) {
+  const p = Math.floor(now / (BOARD_SECS * 1000)), w = weekNo(now);
+  const offers = CON_KINDS.map((k, i) => ({key: 'b' + p + '-' + i, kind: i, level: Math.floor(hash(s.seed, p, i) * CON_LEVELS.length), weekly: false}));
+  offers.push({key: 'w' + w, kind: Math.floor(hash(w, 7) * CON_KINDS.length), level: 2, weekly: true});
+  return offers;
+}
+export const conNextBoard = (now) => (BOARD_SECS * 1000 - (now % (BOARD_SECS * 1000))) / 1000;
+export const conTokens = (o) => CON_LEVELS[o.level].tokens * (o.weekly ? 2 : 1);
+export const conActive = (s) => s.con.active;
+export const conTwist = (s) => (s.con.active ? CON_KINDS[s.con.active.kind].id : '');
+/** Contract twists on factories: half speed on strike, off for the first half of a blackout. */
+export function conFactory(s) {
+  const a = s.con.active;
+  if (!a) return 1;
+  const id = CON_KINDS[a.kind].id;
+  return id === 'strike' ? 0.5 : id === 'blackout' && a.left > CON_SECS / 2 ? 0 : 1;
+}
+/** Income to measure a contract against: without the frenzy and without any contract twist. */
+function baseIncome(s) {
+  const a = s.con.active;
+  s.con.active = null;
+  syncCrew(s);
+  const v = income(s) / (s.frenzy > 0 ? frenzyMult(s) : 1);
+  s.con.active = a;
+  syncCrew(s);
+  return v;
+}
+/** Starts offer `key` from the board at `now`. */
+export function startContract(s, key, now) {
+  const o = conOffers(s, now).find((x) => x.key === key);
+  if (!o || s.con.active || s.con.done.includes(key) || !wingOpen(s, WINGS[2])) return false;
+  const target = Math.ceil(CON_SECS * baseIncome(s) * CON_KINDS[o.kind].factor * CON_LEVELS[o.level].mult);
+  s.con.active = {key, kind: o.kind, level: o.level, weekly: o.weekly, target, total0: s.total, left: CON_SECS};
+  syncCrew(s);
+  return true;
+}
+export const conEarned = (s) => (s.con.active ? s.total - s.con.active.total0 : 0);
+/** Gives up the running contract (it counts as failed; the offer is used up). */
+export function quitContract(s) {
+  if (s.con.active) endContract(s, false);
+}
+function endContract(s, ok) {
+  const a = s.con.active, tokens = ok ? conTokens(a) : 0;
+  s.con.active = null;
+  s.con.done = [...s.con.done.slice(-40), a.key];
+  if (ok) {
+    s.lab.tokens += tokens;
+    s.stats.contracts++;
+    if (!s.con.kinds.includes(a.kind)) s.con.kinds.push(a.kind);
+  }
+  s.con.result = {ok, tokens, kind: a.kind, n: ((s.con.result && s.con.result.n) || 0) + 1};
+  logEvent(s, 'contract', a.key + ':' + (ok ? 1 : 0));
+  syncCrew(s);
+}
+/** The contract clock runs on game time (time away counts too). Done as soon as the target is earned. */
+function tickContract(s, dt) {
+  const a = s.con.active;
+  if (!a) return;
+  const half = a.left > CON_SECS / 2;
+  a.left -= dt;
+  if (conEarned(s) >= a.target) endContract(s, true);
+  else if (a.left <= 0) endContract(s, false);
+  else if (half && a.left <= CON_SECS / 2) syncCrew(s); // a blackout ends halfway
+}
+
+// ---------- era 2: the Lab ----------
+
+export const labOpen = (s, x) => x.row === 0 || LAB.filter((y) => y.row === x.row - 1 && labHas(s, y.id)).length >= 2;
+export function research(s, id) {
+  const x = LAB.find((y) => y.id === id);
+  if (!x || labHas(s, id) || !wingOpen(s, WINGS[3]) || !labOpen(s, x) || s.lab.tokens < x.cost) return false;
+  s.lab.tokens -= x.cost;
+  s.lab.done.push(id);
+  logEvent(s, 'research', id);
+  syncCrew(s);
+  return true;
+}
+/** Night-shift autopilot: opens the loot of every underling that's back and sends it to the same place again. */
+export function autoTrips(s, now) {
+  if (!labHas(s, 'autotrip')) return [];
+  const out = [];
+  for (const [n, j] of tripsReady(s, now)) {
+    const t = s.crew[n].subs[j].trip.t;
+    out.push(...openTrip(s, n, j, now));
+    sendTrip(s, n, j, t, now);
+  }
+  return out;
 }
 
 /** Appends to the event log the friends league will upload. */
@@ -804,6 +952,8 @@ export function statValue(s, k) {
     case 'arcBest': return Math.max(0, ...Object.values(s.arcade.best));
     case 'sortBest': return s.arcade.best.sort || 0;
     case 'rushBest': return s.arcade.best.rush || 0;
+    case 'conKinds': return s.con.kinds.length;
+    case 'research': return s.lab.done.length;
     default: return s.stats[k] || 0;
   }
 }
@@ -819,7 +969,7 @@ export const skinReleased = (s, id) => id in s.released;
 export const skinPrice = (s, id) => s.released[id];
 /** What a newly released skin of class c costs: CLASSES[c].secs of income at the time (at least its floor). */
 export function releasePrice(s, c) {
-  const k = CLASSES[c], pace = income(s) / (s.frenzy > 0 ? FRENZY_MULT : 1);
+  const k = CLASSES[c], pace = income(s) / (s.frenzy > 0 ? frenzyMult(s) : 1);
   const p = Math.max(k.floor, k.secs * pace);
   const mag = Math.pow(10, Math.floor(Math.log10(p)) - 1); // two significant digits
   return Math.ceil(p / mag) * mag;
@@ -876,7 +1026,7 @@ export function boxSecs(b) {
   return Math.round(ev * b.items * SECS_PER_PART * b.discount);
 }
 export function boxPrice(s, i) {
-  const p = Math.max(1e5, boxSecs(BOXES[i]) * income(s) / (s.frenzy > 0 ? FRENZY_MULT : 1));
+  const p = Math.max(1e5, boxSecs(BOXES[i]) * income(s) / (s.frenzy > 0 ? frenzyMult(s) : 1));
   const mag = Math.pow(10, Math.floor(Math.log10(p)) - 1);
   return Math.ceil(p / mag) * mag;
 }
@@ -890,7 +1040,7 @@ function boxItem(s, c) {
   let kind = BOX_ITEMS[rollWeighted(s, BOX_ITEMS.map((x) => x.weight))].id;
   const skins = SKINS.filter((sk) => sk.cls === c && !s.skins.includes(sk.id) && !sk.secret);
   if (kind === 'skin' && !skins.length) kind = 'part';
-  if (kind === 'spool' && (!s.cat || s.spools >= MAX_SPOOLS)) kind = 'crate';
+  if (kind === 'spool' && (!s.cat || s.spools >= spoolCap(s))) kind = 'crate';
   if (kind === 'blueprint' && !s.facs.length) kind = 'crate';
   if (kind === 'skin') {
     const sk = skins[Math.floor(rand(s) * skins.length)];
@@ -904,16 +1054,16 @@ function boxItem(s, c) {
     return {cls: c, kind, text: 'UPGRADE · +' + +(v * 100).toFixed(1) + '% ' + BONUSES[type].label.toUpperCase() + ' FOR GOOD'};
   }
   if (kind === 'spool') {
-    const n = Math.min(ITEM_COUNT[c], MAX_SPOOLS - s.spools);
+    const n = Math.min(ITEM_COUNT[c], spoolCap(s) - s.spools);
     s.spools += n;
-    return {cls: c, kind, text: (n === 1 ? 'A GOLDEN SPOOL' : n + ' GOLDEN SPOOLS') + ' · YARN ×' + FRENZY_MULT + ' WHEN YOU LIKE'};
+    return {cls: c, kind, text: (n === 1 ? 'A GOLDEN SPOOL' : n + ' GOLDEN SPOOLS') + ' · YARN ×' + frenzyMult(s) + ' WHEN YOU LIKE'};
   }
   if (kind === 'blueprint') {
     const f = s.facs[Math.floor(rand(s) * s.facs.length)];
     f.bp = (f.bp || 0) + ITEM_COUNT[c];
     return {cls: c, kind, text: (ITEM_COUNT[c] === 1 ? 'BLUEPRINT' : ITEM_COUNT[c] + ' BLUEPRINTS') + ' · FACTORY #' + (f.i + 1) + ' ×' + +Math.pow(BP_STEP, ITEM_COUNT[c]).toFixed(2) + ' FOR GOOD'};
   }
-  const g = Math.ceil(CRATE_MINUTES[c] * 60 * income(s) / (s.frenzy > 0 ? FRENZY_MULT : 1));
+  const g = Math.ceil(CRATE_MINUTES[c] * 60 * income(s) / (s.frenzy > 0 ? frenzyMult(s) : 1));
   earn(s, g);
   return {cls: c, kind: 'crate', text: CRATE_MINUTES[c] + ' MIN OF CLICKS · +' + fmt(g)};
 }
@@ -1000,7 +1150,9 @@ export function serialize(s) {
     tracks: [...s.tracks], track: s.track, savedAt: s.savedAt,
     stats: {...s.stats}, feats: [...s.feats], log: [...s.log], released: {...s.released}, fresh: [...s.fresh],
     badges: {...s.badges}, profile: {...s.profile}, events: s.events.map((e) => ({...e})), test: s.test, quest: {...s.quest},
-    arcade: {...s.arcade, best: {...s.arcade.best}}};
+    arcade: {...s.arcade, best: {...s.arcade.best}},
+    con: {active: s.con.active && {...s.con.active}, done: [...s.con.done], kinds: [...s.con.kinds], result: null},
+    lab: {tokens: s.lab.tokens, done: [...s.lab.done]}};
 }
 
 /** Keeps only known ids, always includes the free first item, and falls back to it if the selection isn't owned. */
@@ -1095,17 +1247,27 @@ export function deserialize(data) {
     .slice(-MAX_EVENTS).map((e) => ({t: e.t, k: e.k.slice(0, 12), v: typeof e.v === 'number' || typeof e.v === 'string' ? e.v : 0}));
   s.test = data.test === true;
   const ar = data.arcade && typeof data.arcade === 'object' ? data.arcade : {};
-  s.arcade.plays = 'plays' in ar ? int(ar.plays, PLAYS_MAX) : PLAYS_MAX;
+  s.arcade.plays = 'plays' in ar ? int(ar.plays, PLAYS_MAX + 1) : PLAYS_MAX;
   s.arcade.at = num(ar.at);
   s.arcade.tickets = int(ar.tickets, 1e6);
   for (const g of ARCADE_GAMES) if (ar.best && num(ar.best[g.id]) > 0) s.arcade.best[g.id] = int(ar.best[g.id], 1000);
+  const cn = data.con && typeof data.con === 'object' ? data.con : {}, a = cn.active;
+  s.con.done = (Array.isArray(cn.done) ? cn.done : []).filter((k) => typeof k === 'string' && k.length < 16).slice(-40);
+  s.con.kinds = (Array.isArray(cn.kinds) ? cn.kinds : []).filter((k) => Number.isInteger(k) && CON_KINDS[k]).filter((k, i, l) => l.indexOf(k) === i);
+  if (a && typeof a.key === 'string' && CON_KINDS[a.kind] && CON_LEVELS[a.level] && num(a.target) > 0) {
+    s.con.active = {key: a.key.slice(0, 16), kind: a.kind, level: a.level, weekly: a.weekly === true, target: num(a.target),
+      total0: Math.min(num(a.total0), s.total), left: Math.min(num(a.left), CON_SECS)};
+  }
+  const lb = data.lab && typeof data.lab === 'object' ? data.lab : {};
+  s.lab.tokens = int(lb.tokens, 1e6);
+  s.lab.done = (Array.isArray(lb.done) ? lb.done : []).filter((id, i, l) => LAB.some((x) => x.id === id) && l.indexOf(id) === i);
   const q = data.quest && typeof data.quest === 'object' ? data.quest : {};
   s.quest.i = int(q.i, QUESTS.length);
   s.quest.step = QUESTS[s.quest.i] ? int(q.step, QUESTS[s.quest.i].steps.length - 1) : 0;
   s.tracks = ownedList(TRACKS, data.tracks);
   s.track = s.tracks.includes(data.track) ? data.track : TRACKS[0].id;
   s.frenzy = s.cat ? Math.min(num(data.frenzy), FRENZY_SECONDS * (1 + bonus(s, 'yarn'))) : 0;
-  s.spools = s.cat ? int(data.spools, MAX_SPOOLS) : 0;
+  s.spools = s.cat ? int(data.spools, 10) : 0;
   s.savedAt = num(data.savedAt, Date.now());
   return s;
 }

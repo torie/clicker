@@ -199,7 +199,7 @@ function renderMain() {
   const s = state;
   set($('best'), 'text', G.fmt(s.best));
   // During a golden yarn frenzy the rate spot shows the frenzy instead (the header has no room for both).
-  set($('rate'), 'text', s.frenzy > 0 ? 'YARN ×' + G.FRENZY_MULT + ' · ' + Math.ceil(s.frenzy) + 's' : '+' + G.fmt(G.generating(s)) + '/s');
+  set($('rate'), 'text', s.frenzy > 0 ? 'YARN ×' + G.frenzyMult(s) + ' · ' + Math.ceil(s.frenzy) + 's' : '+' + G.fmt(G.generating(s)) + '/s');
   set($('rate'), 'class', s.frenzy > 0 ? 'frenzy' : '');
   set($('pts'), 'text', G.fmt(s.pts));
   set($('pts'), 'class', 'num ' + (ui.taps ? (ui.taps % 2 ? 'bA' : 'bB') : ''));
@@ -220,7 +220,10 @@ function renderMain() {
     set($('crew-badge'), 'hidden', !ready && !loot);
     set($('crew-badge'), 'text', loot ? String(loot) : '!');
     set($('crew-alert'), 'class', 'crew-alert' + (ready || loot || G.happy(s) ? ' ready' : ' calm'));
-    set($('crew-alert-text'), 'text', ready ? 'CARE TIME IS READY · FACTORIES ×' + G.HAPPY_MULT + ' FOR AN HOUR'
+    const con = G.conActive(s);
+    if (con) set($('crew-alert'), 'class', 'crew-alert ready');
+    set($('crew-alert-text'), 'text', con ? 'CONTRACT · ' + G.CON_KINDS[con.kind].name.toUpperCase() + ' · ' + Math.min(100, Math.floor(100 * G.conEarned(s) / con.target)) + '% · ' + fmtLeft(con.left) + ' LEFT'
+      : ready ? 'CARE TIME IS READY · FACTORIES ×' + G.HAPPY_MULT + ' FOR AN HOUR'
       : loot ? (loot === 1 ? 'AN UNDERLING IS' : loot + ' UNDERLINGS ARE') + ' BACK FROM THE NIGHT SHIFT WITH LOOT'
       : G.happy(s) ? 'HAPPY CREW · FACTORIES ×' + G.HAPPY_MULT + ' · ' + minutesLeft(s) + ' LEFT'
       : 'CREW OK · ' + s.crew.length + (s.crew.length === 1 ? ' KITTEN' : ' KITTENS') + ' WORKING');
@@ -524,7 +527,7 @@ function openCrew() {
   $('crew-back').focus({ preventScroll: true });
 }
 $('open-crew').addEventListener('click', openCrew);
-$('crew-alert').addEventListener('click', openCrew);
+$('crew-alert').addEventListener('click', () => (G.conActive(state) ? openView('contracts') : openCrew()));
 $('crew-back').addEventListener('click', () => { ui.view = 'main'; render(); });
 
 function hire(i) {
@@ -773,7 +776,7 @@ $('shift').addEventListener('click', (e) => { if (e.target === $('shift')) close
 
 $('use-spool').addEventListener('click', () => {
   if (!G.useSpool(state)) return;
-  showToast('GOLDEN SPOOL · ALL INCOME ×' + G.FRENZY_MULT + ' FOR ' + Math.round(state.frenzy) + 's');
+  showToast('GOLDEN SPOOL · ALL INCOME ×' + G.frenzyMult(state) + ' FOR ' + Math.round(state.frenzy) + 's');
   save();
   render();
 });
@@ -1151,6 +1154,8 @@ const wingRows = G.WINGS.map((w) => {
     if (!G.wingOpen(state, w)) return;
     if (w.id === 'exp') openCrew();
     if (w.id === 'arc') openArcade();
+    if (w.id === 'con') openView('contracts');
+    if (w.id === 'lab') openView('lab');
   });
   r.el.classList.add('wing');
   $('wing-rows').appendChild(r.el);
@@ -1172,7 +1177,7 @@ function renderHQ() {
     const r = wingRows[i], open = G.wingOpen(s, w), n = G.wingBadges(s, w), next = G.nextBadge(s, w);
     setRow(r, {
       cls: 'wing ' + (!w.built || !open ? 'locked no' : next ? 'ok' : 'maxed'),
-      disabled: !(['exp', 'arc'].includes(w.id) && open),
+      disabled: !open,
       nm: w.name + (open && w.built ? ' ▸' : ''),
       price: w.built ? badgeDots(n, w.badges.length) : '···',
       ds: !w.built ? 'COMING SOON · ' + w.desc : !open ? 'Opens at ' + w.opensText : next ? G.BADGE_NAMES[next.tier].toUpperCase() + ': ' + next.text : 'ALL BADGES · ' + w.desc,
@@ -1190,6 +1195,75 @@ function renderHQ() {
   }
   if (document.activeElement !== $('profile-name')) $('profile-name').value = s.profile.name;
   set($('profile-info'), 'text', 'ID ' + s.profile.id + ' · ' + s.events.length + ' EVENTS SAVED FOR THE LEAGUE' + (s.test ? ' · TEST SAVE: WON\'T COUNT' : ''));
+}
+
+// ---------- era 2: Contracts and the Lab ----------
+
+function openView(view) {
+  ui.view = view;
+  render();
+  $(view + '-back').focus({ preventScroll: true });
+}
+$('contracts-back').addEventListener('click', openHQ);
+$('lab-back').addEventListener('click', openHQ);
+$('con-quit').addEventListener('click', () => { G.quitContract(state); save(); render(); });
+const conRows = [];
+function renderContracts() {
+  const s = state, now = Date.now(), a = G.conActive(s);
+  if (!G.wingOpen(s, G.WINGS[2])) { ui.view = 'hq'; return; }
+  set($('con-tokens'), 'text', String(s.lab.tokens));
+  set($('con-active'), 'hidden', !a);
+  if (a) {
+    const k = G.CON_KINDS[a.kind], earned = G.conEarned(s);
+    set($('con-kind'), 'text', (a.weekly ? 'WEEKLY · ' : '') + k.name.toUpperCase() + ' · ' + G.CON_LEVELS[a.level].name.toUpperCase());
+    set($('con-left'), 'text', fmtLeft(Math.max(0, a.left)));
+    set($('con-goal'), 'text', 'EARN ' + G.fmt(a.target) + ' · ' + G.fmt(earned) + ' SO FAR');
+    set($('con-fill'), 'width', Math.min(100, 100 * earned / a.target).toFixed(1) + '%');
+    set($('con-twist'), 'text', k.twist + '. Done the moment you reach it. Pays ' + G.conTokens(a) + ' paw tokens.');
+  }
+  set($('con-note'), 'text', (a ? 'One contract at a time. ' : 'Pick a contract: ' + G.CON_SECS / 60 + ' minutes to earn the target, measured against your income when you start. ') +
+    'New offers in ' + fmtLeft(G.conNextBoard(now)) + '. The weekly contract is the same for every player.');
+  const offers = G.conOffers(s, now);
+  while (conRows.length < offers.length) {
+    const i = conRows.length, r = makeRow(() => {
+      const o = G.conOffers(state, Date.now())[i];
+      if (o && G.startContract(state, o.key, Date.now())) { save(); render(); }
+    });
+    $('con-rows').appendChild(r.el);
+    conRows.push(r);
+  }
+  offers.forEach((o, i) => {
+    const k = G.CON_KINDS[o.kind], done = s.con.done.includes(o.key);
+    setRow(conRows[i], {
+      cls: (o.weekly ? 'weekly ' : '') + (done ? 'maxed' : a ? 'no' : 'ok'), disabled: done || !!a,
+      nm: (o.weekly ? 'WEEKLY · ' : '') + k.name + ' · ' + G.CON_LEVELS[o.level].name,
+      price: a && a.key === o.key ? 'RUNNING' : done ? 'DONE' : G.conTokens(o) + ' PAW',
+      ds: k.twist + ' · target ' + Math.round(k.factor * G.CON_LEVELS[o.level].mult * 100) + '% of ' + G.CON_SECS / 60 + ' min of income', bar: '' });
+  });
+}
+const labRows = G.LAB.map((x) => {
+  if (G.LAB.find((y) => y.row === x.row) === x) $('lab-rows').appendChild(h('div', 'lab-row-title', 'ROW ' + (x.row + 1) + ' · ' + x.cost + ' PAW EACH'));
+  const r = makeRow(() => { if (G.research(state, x.id)) { flash('lab-' + x.id); showToast('RESEARCHED · ' + x.name.toUpperCase()); save(); render(); } });
+  $('lab-rows').appendChild(r.el);
+  return r;
+});
+function renderLab() {
+  const s = state;
+  if (!G.wingOpen(s, G.WINGS[3])) { ui.view = 'hq'; return; }
+  set($('lab-tokens'), 'text', String(s.lab.tokens));
+  G.LAB.forEach((x, i) => {
+    const done = G.labHas(s, x.id), open = G.labOpen(s, x), can = open && s.lab.tokens >= x.cost;
+    setRow(labRows[i], { cls: (done ? 'owned' : can ? 'ok' : 'no') + flashCls('lab-' + x.id), disabled: done || !open,
+      nm: x.name, price: done ? 'DONE' : open ? x.cost + ' PAW' : 'LOCKED', ds: x.desc, bar: done || !open ? '' : bar(s.lab.tokens / x.cost) });
+  });
+}
+/** A toast when a contract ends, won or lost. */
+ui.conSeen = 0;
+function announceContract() {
+  const r = state.con.result;
+  if (!r || r.n === ui.conSeen) return;
+  ui.conSeen = r.n;
+  showToast(r.ok ? 'CONTRACT DONE · ' + G.CON_KINDS[r.kind].name.toUpperCase() + ' · +' + r.tokens + ' PAW TOKENS' : 'CONTRACT FAILED · ' + G.CON_KINDS[r.kind].name.toUpperCase() + ' · NO TOKENS');
 }
 
 // ---------- era 2: the Arcade ----------
@@ -1226,8 +1300,8 @@ function renderArcade() {
   if (!G.wingOpen(s, G.WINGS[1])) { ui.view = 'hq'; return; }
   const plays = G.refillPlays(s, now);
   set($('arc-tickets'), 'text', String(s.arcade.tickets));
-  set($('arc-plays'), 'text', '●'.repeat(plays) + '○'.repeat(G.PLAYS_MAX - plays));
-  set($('arc-refill'), 'text', plays >= G.PLAYS_MAX ? 'All plays ready. One comes back every ' + G.PLAY_REFILL / 60 + ' minutes after you use it.'
+  set($('arc-plays'), 'text', '●'.repeat(plays) + '○'.repeat(Math.max(0, G.playsMax(s) - plays)));
+  set($('arc-refill'), 'text', plays >= G.playsMax(s) ? 'All plays ready. One comes back every ' + G.playRefill(s) / 60 + ' minutes after you use it.'
     : 'Next play in ' + fmtLeft(G.nextPlayIn(s, now)) + '.');
   const nb = G.nextBadge(s, G.WINGS[1]);
   G.ARCADE_GAMES.forEach((g, i) => setRow(arcGameRows[i], {
@@ -1461,7 +1535,7 @@ function tickYarn(dt) {
   if (!state.cat || document.hidden || !yarn.hidden || !quiet || ui.view === 'store') return;
   ui.yarnIn -= dt;
   if (ui.yarnIn > 0) return;
-  ui.yarnIn = YARN_MIN + Math.random() * (YARN_MAX - YARN_MIN);
+  ui.yarnIn = (YARN_MIN + Math.random() * (YARN_MAX - YARN_MIN)) * (G.labHas(state, 'magnet') ? 0.6 : 1);
   yarn.style.top = Math.round(22 + Math.random() * 46) + '%';
   yarn.classList.toggle('rtl', Math.random() < 0.5);
   yarn.hidden = false;
@@ -1475,7 +1549,7 @@ $('gold-yarn').addEventListener('click', () => {
   $('gold-yarn').hidden = true;
   clearTimeout(tickYarn.timer);
   if (!G.catchYarn(state)) return;
-  showToast('GOLDEN YARN · ALL INCOME ×' + G.FRENZY_MULT + ' FOR ' + G.FRENZY_SECONDS + 's');
+  showToast('GOLDEN YARN · ALL INCOME ×' + G.frenzyMult(state) + ' FOR ' + Math.round(state.frenzy) + 's');
   save();
   render();
 });
@@ -1499,6 +1573,8 @@ function render() {
   set($('screen-crew'), 'hidden', ui.view !== 'crew');
   set($('screen-hq'), 'hidden', ui.view !== 'hq');
   set($('screen-arcade'), 'hidden', ui.view !== 'arcade');
+  set($('screen-contracts'), 'hidden', ui.view !== 'contracts');
+  set($('screen-lab'), 'hidden', ui.view !== 'lab');
   const reached = G.checkGoal(state);
   if (reached >= 1) save();
   if (reached === 1) { showStoreUnlock(); ui.introDue = 'crew'; }
@@ -1508,6 +1584,9 @@ function render() {
   if (ui.view === 'crew') renderCrew();
   if (ui.view === 'hq') renderHQ();
   if (ui.view === 'arcade') renderArcade();
+  if (ui.view === 'contracts') renderContracts();
+  if (ui.view === 'lab') renderLab();
+  announceContract();
   announceBadges();
   renderShift();
   if (ui.view === 'factory') renderFactory();
@@ -1522,6 +1601,8 @@ setInterval(() => {
   G.step(state, Math.min(dt, G.MAX_OFFLINE_SECONDS));
   tickYarn(dt);
   announceSkins();
+  const auto = G.autoTrips(state, Date.now());
+  if (auto.length) showToast('AUTOPILOT · ' + auto.length + (auto.length === 1 ? ' THING' : ' THINGS') + ' FROM THE NIGHT SHIFT');
   if (state.cat && ui.view === 'main' && !document.hidden) {
     ui.catTimer += dt;
     if (ui.catTimer >= 0.5) {
