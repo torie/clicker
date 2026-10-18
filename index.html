@@ -177,12 +177,37 @@
       <h2>&gt; WINGS</h2>
       <p class="store-note">Each wing has a bronze, a silver and a gold badge. Levels 4 to 8 need badges as well as points, so pick the wings you like.</p>
       <div class="rows" id="wing-rows"></div>
+      <div class="lesson-card quest-card" id="quest-card" hidden>
+        <span class="sect" id="quest-step">QUEST</span>
+        <span class="nm" id="quest-name"></span>
+        <p class="ds" id="quest-text"></p>
+      </div>
       <h2>&gt; PROFILE</h2>
       <div class="profile-card">
         <label class="ds" for="profile-name">YOUR NAME FOR THE FRIENDS LEAGUE</label>
         <input class="code-input" id="profile-name" type="text" maxlength="16" autocomplete="off" spellcheck="false" placeholder="NAME">
         <p class="ds" id="profile-info"></p>
       </div>
+    </div>
+  </section>
+
+  <section class="screen" id="screen-arcade" aria-label="Arcade" hidden>
+    <header class="top">
+      <button class="back" id="arcade-back">&lt; HQ</button>
+      <span class="strong">ARCADE</span>
+      <span>TICKETS <span class="vt hi" id="arc-tickets">0</span></span>
+    </header>
+    <div class="store-body">
+      <div class="lesson-card arc-plays">
+        <div class="line"><span class="sect">PLAYS</span><span class="vt" id="arc-plays"></span></div>
+        <p class="ds" id="arc-refill"></p>
+      </div>
+      <h2>&gt; GAMES</h2>
+      <div class="rows" id="arc-games"></div>
+      <h2>&gt; PRIZES</h2>
+      <p class="store-note">Every 2 points scored earns a ticket.</p>
+      <div class="rows" id="arc-prizes"></div>
+      <div class="loot" id="arc-loot" hidden></div>
     </div>
   </section>
 
@@ -269,6 +294,19 @@
       <div class="sheet-actions" id="shift-actions">
         <button class="back" id="shift-cancel">CLOSE</button>
         <button class="collect" id="shift-open">OPEN THE LOOT</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="game" id="game" role="dialog" aria-modal="true" aria-labelledby="game-name" hidden>
+    <div class="game-top"><span class="strong" id="game-name">GAME</span><span>SCORE <span class="vt hi" id="game-score">0</span></span><span class="vt" id="game-time">30</span></div>
+    <div class="game-stage" id="game-stage"></div>
+    <div class="game-panel" id="game-panel">
+      <h3 id="game-title">CONVEYOR SORT</h3>
+      <p class="ds" id="game-text"></p>
+      <div class="sheet-actions">
+        <button class="back" id="game-done">DONE</button>
+        <button class="collect" id="game-go">START</button>
       </div>
     </div>
   </div>

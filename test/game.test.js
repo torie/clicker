@@ -323,7 +323,7 @@ test('box upgrades add to the worn skin bonus', () => {
 });
 
 test('era 2: badges come from the wings in order, levels 4-8 need them, capped at what is built', () => {
-  assert.deepEqual([3, 4, 5, 6, 7].map(G.badgeNeed), [1, 1, 2, 3, 3], 'only Expeditions is built: spread over its 3 badges');
+  assert.deepEqual([3, 4, 5, 6, 7].map(G.badgeNeed), [1, 2, 3, 5, 6], 'Expeditions and the Arcade are built: 6 badges');
   const s = rich(1e9);
   for (let i = 0; i < 5; i++) G.buildFactory(s);
   Object.assign(s, { cat: true, goalIdx: 1, pts: 1e9 });
@@ -333,6 +333,7 @@ test('era 2: badges come from the wings in order, levels 4-8 need them, capped a
   assert.equal(G.wingOpen(s, exp), true);
   assert.equal(G.wingOpen(s, arc), false, 'the Arcade waits for the first badge');
   assert.equal(G.checkGoal(s), -1, 'no badge yet');
+  s.stats.sent = 1;
   s.stats.trips = 5;
   assert.deepEqual(G.checkBadges(s).map((b) => b.tier), [0, 1], 'bronze and silver at once');
   assert.equal(G.badgeCount(s), 2);
@@ -359,6 +360,67 @@ test('profile names are cleaned, and play-test codes mark the save', () => {
   assert.equal(s.test, false);
   G.redeemCode(s, 'yumi');
   assert.equal(s.test, true);
+});
+
+test('quests: trips to the right places advance the story and pay rewards; the roof needs silver', () => {
+  const s = rich(1e12);
+  for (let i = 0; i < 5; i++) G.buildFactory(s);
+  Object.assign(s, { cat: true, goalIdx: 1, pts: 1e12 });
+  G.checkGoal(s); G.checkGoal(s);
+  const k = s.crew[0];
+  k.lvl = 15;
+  k.subs = [{ name: 'Bit', trait: k.trait }];
+  assert.equal(G.tripOpen(s, 3), false, 'the roof waits for the silver badge');
+  assert.equal(G.sendTrip(s, 0, 0, 3, 0), false);
+  let now = 0;
+  const trip = (t) => { assert.equal(G.sendTrip(s, 0, 0, t, now), true); now += G.TRIPS[t].secs * 1000; return G.openTrip(s, 0, 0, now); };
+  assert.equal(G.questNow(s).q.id, 'blueprint');
+  const wrong = trip(2);
+  assert.ok(!wrong.some((l) => l.id === 'quest'), 'the server room is not step 1');
+  const spools = s.spools, first = trip(0);
+  assert.ok(first.some((l) => l.id === 'quest'));
+  assert.equal(s.spools >= spools + 1, true, 'step reward: a spool');
+  assert.equal(G.questNow(s).n, 1);
+  trip(1); trip(0);
+  const bp = s.facs.map((f) => f.bp);
+  const last = trip(2);
+  assert.ok(last.some((l) => l.text.startsWith('QUEST COMPLETE')));
+  assert.ok(s.facs.every((f, i) => f.bp >= bp[i] + 1), 'the golden blueprint: every factory');
+  assert.equal(G.questNow(s).q.id, 'smugglers');
+  assert.equal(s.stats.quests, 1);
+  s.badges.exp = 2;
+  assert.equal(G.tripOpen(s, 3), true);
+  const t = G.deserialize(JSON.parse(JSON.stringify(G.serialize(s))));
+  assert.deepEqual(t.quest, s.quest, 'quest progress survives a save');
+});
+
+test('arcade: plays refill over time, scores pay tickets, tickets buy prizes, best scores give badges', () => {
+  const s = rich(1e12);
+  for (let i = 0; i < 5; i++) G.buildFactory(s);
+  Object.assign(s, { cat: true, goalIdx: 1, pts: 1e12 });
+  G.checkGoal(s); G.checkGoal(s);
+  assert.equal(G.startGame(s, 'sort', 0), false, 'the Arcade opens with the first badge');
+  s.stats.sent = 1;
+  G.checkBadges(s);
+  const t0 = 1e9;
+  for (let i = 0; i < G.PLAYS_MAX; i++) assert.equal(G.startGame(s, 'sort', t0), true);
+  assert.equal(G.startGame(s, 'sort', t0), false, 'out of plays');
+  assert.equal(G.nextPlayIn(s, t0), G.PLAY_REFILL);
+  assert.equal(G.refillPlays(s, t0 + G.PLAY_REFILL * 1000), 1);
+  assert.equal(G.refillPlays(s, t0 + G.PLAY_REFILL * 3000 + 5), G.PLAYS_MAX);
+  const r = G.finishGame(s, 'sort', 21); // 10 tickets; bronze (10) and silver (16)
+  assert.deepEqual(r, { tickets: 10, best: true });
+  assert.equal(G.wingBadges(s, G.WINGS[1]), 2, 'score 10 and 20 in sort: bronze and silver');
+  G.finishGame(s, 'rush', 35); // gold (30)
+  assert.equal(G.wingBadges(s, G.WINGS[1]), 3);
+  assert.equal(s.arcade.tickets, 27);
+  assert.equal(G.buyPrize(s, 'box'), null, 'not enough tickets');
+  assert.ok(G.buyPrize(s, 'spool'));
+  assert.equal(s.arcade.tickets, 12);
+  s.arcade.tickets = 50;
+  assert.equal(G.buyPrize(s, 'box').length, 3);
+  const t = G.deserialize(JSON.parse(JSON.stringify(G.serialize(s))));
+  assert.deepEqual(t.arcade, s.arcade);
 });
 
 test('the code yumi unlocks every skin; unknown codes do nothing', () => {
@@ -418,7 +480,8 @@ test('the levels go ×10 from 1M to 10T; 100M opens underlings and later levels 
   assert.equal(G.levelBonus(s), 1);
   s.pts = 1e9;
   assert.equal(G.checkGoal(s), -1, 'level 4 also needs a badge');
-  s.badges.exp = 3; // every badge that can be earned today
+  s.badges.exp = 3;
+  s.badges.arc = 3; // every badge that can be earned today
   assert.equal(G.checkGoal(s), 3);
   assert.equal(G.levelBonus(s), G.LEVEL_BONUS);
   for (let i = 4; i < G.GOALS.length; i++) { s.pts = G.GOALS[i].at; assert.equal(G.checkGoal(s), i); }

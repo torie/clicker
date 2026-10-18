@@ -703,11 +703,14 @@ function openShift(n, j) {
   $('shift-loot').textContent = '';
   const rows = $('shift-rows');
   rows.textContent = '';
+  const quest = G.questNow(state);
   G.TRIPS.forEach((t, i) => {
-    const r = makeRow(() => sendShift(i));
-    const hrs = t.secs / 3600;
-    setRow(r, { cls: 'ok', nm: t.name, price: hrs < 1 ? t.secs / 60 + ' MIN' : hrs + ' H',
-      ds: 'Brings back ' + (t.items === 1 ? 'one thing' : t.items + ' things') + (i === 2 ? ' · best odds of blueprints' : ''), bar: '' });
+    const r = makeRow(() => sendShift(i)), open = G.tripOpen(state, i), hrs = t.secs / 3600;
+    const questHere = quest && quest.step.t === i;
+    setRow(r, { cls: open ? 'ok' + (questHere ? ' quest' : '') : 'no', disabled: !open,
+      nm: (questHere ? '★ ' : '') + t.name, price: hrs < 1 ? t.secs / 60 + ' MIN' : hrs + ' H',
+      ds: !open ? 'Opens with the silver Expeditions badge'
+        : (questHere ? 'QUEST: ' + quest.q.name + ' · ' : '') + 'Brings back ' + (t.items === 1 ? 'one thing' : t.items + ' things') + (i === 2 ? ' · best odds of blueprints' : ''), bar: '' });
     rows.appendChild(r.el);
   });
   $('shift').hidden = false;
@@ -825,6 +828,7 @@ document.addEventListener('keydown', (e) => {
   if (!$('play').hidden) closePlay();
   else if (!$('move').hidden) closeMove();
   else if (!$('shift').hidden) closeShift();
+  else if (!$('game').hidden) closeGame();
   else if (!$('lesson').hidden) { $('lesson').hidden = true; render(); }
 });
 
@@ -1143,7 +1147,11 @@ function openHQ() {
 $('open-hq').addEventListener('click', openHQ);
 $('hq-back').addEventListener('click', () => { ui.view = 'main'; render(); });
 const wingRows = G.WINGS.map((w) => {
-  const r = makeRow(() => { if (w.id === 'exp' && G.wingOpen(state, w)) openCrew(); });
+  const r = makeRow(() => {
+    if (!G.wingOpen(state, w)) return;
+    if (w.id === 'exp') openCrew();
+    if (w.id === 'arc') openArcade();
+  });
   r.el.classList.add('wing');
   $('wing-rows').appendChild(r.el);
   return r;
@@ -1164,15 +1172,193 @@ function renderHQ() {
     const r = wingRows[i], open = G.wingOpen(s, w), n = G.wingBadges(s, w), next = G.nextBadge(s, w);
     setRow(r, {
       cls: 'wing ' + (!w.built || !open ? 'locked no' : next ? 'ok' : 'maxed'),
-      disabled: !(w.id === 'exp' && open),
+      disabled: !(['exp', 'arc'].includes(w.id) && open),
       nm: w.name + (open && w.built ? ' ▸' : ''),
       price: w.built ? badgeDots(n, w.badges.length) : '···',
       ds: !w.built ? 'COMING SOON · ' + w.desc : !open ? 'Opens at ' + w.opensText : next ? G.BADGE_NAMES[next.tier].toUpperCase() + ': ' + next.text : 'ALL BADGES · ' + w.desc,
       bar: open && next ? bar(next.progress) : ''
     });
   });
+  // The running side-quest, under the wings: where to send an underling next.
+  const q = G.questNow(s), expOpen = G.wingOpen(s, G.WINGS[0]);
+  set($('quest-card'), 'hidden', !expOpen);
+  if (expOpen) {
+    set($('quest-step'), 'text', q ? 'EXPEDITIONS · QUEST ' + (q.i + 1) + ' OF ' + G.QUESTS.length + ' · STEP ' + (q.n + 1) + '/' + q.q.steps.length : 'EXPEDITIONS · QUESTS');
+    set($('quest-name'), 'text', q ? q.q.name.toUpperCase() : 'EVERY QUEST IS DONE');
+    set($('quest-text'), 'text', q ? 'Next: send an underling to ' + G.TRIPS[q.step.t].name.toLowerCase() + (G.tripOpen(s, q.step.t) ? '' : ' (opens with the silver badge)') + '. Reward: ' + G.rewardText(q.step.reward).toLowerCase() + '.'
+      : 'More stories are on their way.');
+  }
   if (document.activeElement !== $('profile-name')) $('profile-name').value = s.profile.name;
   set($('profile-info'), 'text', 'ID ' + s.profile.id + ' · ' + s.events.length + ' EVENTS SAVED FOR THE LEAGUE' + (s.test ? ' · TEST SAVE: WON\'T COUNT' : ''));
+}
+
+// ---------- era 2: the Arcade ----------
+
+function openArcade() {
+  ui.view = 'arcade';
+  $('arc-loot').hidden = true;
+  render();
+  $('arcade-back').focus({ preventScroll: true });
+}
+$('arcade-back').addEventListener('click', openHQ);
+const arcGameRows = G.ARCADE_GAMES.map((g) => {
+  const r = makeRow(() => openGame(g.id));
+  $('arc-games').appendChild(r.el);
+  return r;
+});
+const prizeRows = G.PRIZES.map((p) => {
+  const r = makeRow(() => {
+    const loot = G.buyPrize(state, p.id);
+    if (!loot) return;
+    const box = $('arc-loot');
+    box.textContent = '';
+    loot.forEach((it, i) => { const ln = h('div', 'ln c' + it.cls, '> ' + it.text); ln.style.animationDelay = (0.1 + i * 0.25) + 's'; box.appendChild(ln); });
+    box.hidden = false;
+    flash('prize-' + p.id);
+    save();
+    render();
+  });
+  $('arc-prizes').appendChild(r.el);
+  return r;
+});
+function renderArcade() {
+  const s = state, now = Date.now();
+  if (!G.wingOpen(s, G.WINGS[1])) { ui.view = 'hq'; return; }
+  const plays = G.refillPlays(s, now);
+  set($('arc-tickets'), 'text', String(s.arcade.tickets));
+  set($('arc-plays'), 'text', '●'.repeat(plays) + '○'.repeat(G.PLAYS_MAX - plays));
+  set($('arc-refill'), 'text', plays >= G.PLAYS_MAX ? 'All plays ready. One comes back every ' + G.PLAY_REFILL / 60 + ' minutes after you use it.'
+    : 'Next play in ' + fmtLeft(G.nextPlayIn(s, now)) + '.');
+  const nb = G.nextBadge(s, G.WINGS[1]);
+  G.ARCADE_GAMES.forEach((g, i) => setRow(arcGameRows[i], {
+    cls: plays ? 'ok' : 'no', nm: g.name, price: plays ? 'PLAY' : 'NO PLAYS',
+    ds: 'BEST ' + (s.arcade.best[g.id] || 0) + ' · ' + g.desc + (nb && nb.k === g.id + 'Best' ? ' · ' + G.BADGE_NAMES[nb.tier].toUpperCase() + ' AT ' + nb.at : ''), bar: '' }));
+  G.PRIZES.forEach((p, i) => {
+    const can = s.arcade.tickets >= p.cost;
+    setRow(prizeRows[i], { cls: (can ? 'ok' : 'no') + flashCls('prize-' + p.id), nm: p.name, price: p.cost + ' TICKETS', ds: p.desc, bar: can ? '' : bar(s.arcade.tickets / p.cost) });
+  });
+}
+
+// The mini-games: 30 seconds each, drawn with plain DOM in #game-stage. The rules only see the final score.
+const game = { id: '', score: 0, left: 0, items: [], raf: 0, last: 0, spawn: 0, jump: 0, running: false };
+function openGame(id) {
+  const g = G.ARCADE_GAMES.find((x) => x.id === id);
+  game.id = id;
+  $('game').hidden = false;
+  $('game-name').textContent = g.name.toUpperCase();
+  $('game-stage').textContent = '';
+  $('game-stage').className = 'game-stage ' + id;
+  $('game-score').textContent = '0';
+  $('game-time').textContent = String(G.ARCADE_SECS);
+  showGamePanel(g.name.toUpperCase(), g.desc + ' ' + G.ARCADE_SECS + ' seconds. Uses one play.');
+}
+function showGamePanel(title, text) {
+  const plays = G.refillPlays(state, Date.now());
+  $('game-title').textContent = title;
+  $('game-text').textContent = text;
+  $('game-go').textContent = plays ? 'START · ' + plays + (plays === 1 ? ' PLAY LEFT' : ' PLAYS LEFT') : 'NO PLAYS LEFT';
+  $('game-go').disabled = !plays;
+  $('game-panel').hidden = false;
+  (plays ? $('game-go') : $('game-done')).focus({ preventScroll: true });
+}
+function closeGame() {
+  if (game.running) { stopGame(); G.finishGame(state, game.id, game.score); save(); } // leaving early still counts the score
+  $('game').hidden = true;
+  render();
+}
+$('game-done').addEventListener('click', closeGame);
+$('game-go').addEventListener('click', () => {
+  if (!G.startGame(state, game.id, Date.now())) return;
+  save();
+  $('game-panel').hidden = true;
+  const stage = $('game-stage');
+  stage.textContent = '';
+  Object.assign(game, { score: 0, left: G.ARCADE_SECS, items: [], last: performance.now(), spawn: 0, jump: 0, running: true });
+  $('game-score').textContent = '0';
+  if (game.id === 'rush') {
+    const y = h('button', 'gi yarn');
+    y.innerHTML = $('yarn').innerHTML;
+    y.setAttribute('aria-label', 'Yarn ball');
+    y.addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); gamePoint(1, y); moveRushYarn(y); });
+    stage.appendChild(y);
+    game.items = [y];
+    moveRushYarn(y);
+  }
+  game.raf = requestAnimationFrame(gameFrame);
+});
+$('game-stage').addEventListener('pointerdown', (e) => {
+  if (game.running && game.id === 'rush' && e.target === $('game-stage')) gamePoint(-1); // a miss
+});
+function gamePoint(n, el) {
+  game.score = Math.max(0, game.score + n);
+  $('game-score').textContent = String(game.score);
+  if (n < 0) { const st = $('game-stage'); st.classList.remove('hurt'); void st.offsetWidth; st.classList.add('hurt'); }
+  else if (el) {
+    const p = h('span', 'pop', '+' + n);
+    p.style.left = el.style.left || '50%';
+    p.style.top = el.style.top || '50%';
+    p.addEventListener('animationend', () => p.remove());
+    $('game-stage').appendChild(p);
+  }
+}
+function moveRushYarn(y) {
+  const st = $('game-stage');
+  y.style.left = Math.round(Math.random() * Math.max(0, st.clientWidth - 60)) + 'px';
+  y.style.top = Math.round(Math.random() * Math.max(0, st.clientHeight - 60)) + 'px';
+  game.jump = Math.max(0.55, 1.1 - (G.ARCADE_SECS - game.left) * 0.02); // it runs off by itself, faster as time goes
+}
+function gameFrame(t) {
+  if (!game.running) return;
+  const dt = Math.min(0.1, (t - game.last) / 1000), st = $('game-stage'), elapsed = G.ARCADE_SECS - game.left;
+  game.last = t;
+  game.left -= dt;
+  $('game-time').textContent = String(Math.max(0, Math.ceil(game.left)));
+  if (game.id === 'sort') {
+    // Clicks (+1) and glitches (!!) fall towards the silo. Tap glitches (+1); tapping a click costs 2; a glitch in the silo costs 1.
+    game.spawn -= dt;
+    if (game.spawn <= 0) {
+      game.spawn = Math.max(0.35, 0.8 - elapsed * 0.015);
+      const glitch = Math.random() < 0.55, el = h('button', 'gi ' + (glitch ? 'glitch' : 'click'), glitch ? '!!' : '+1');
+      el.setAttribute('aria-label', glitch ? 'Glitch' : 'Click');
+      const it = { el, glitch, x: Math.random() * Math.max(0, st.clientWidth - 52), y: -52 };
+      el.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        if (!game.running || it.gone) return;
+        it.gone = true;
+        gamePoint(it.glitch ? 1 : -2, el);
+        el.remove();
+      });
+      st.appendChild(el);
+      game.items.push(it);
+    }
+    const speed = 150 + elapsed * 7, floor = st.clientHeight - 22 - 52;
+    for (const it of game.items) {
+      if (it.gone) continue;
+      it.y += speed * dt;
+      if (it.y >= floor) { it.gone = true; it.el.remove(); if (it.glitch) gamePoint(-1); continue; }
+      it.el.style.left = Math.round(it.x) + 'px';
+      it.el.style.top = Math.round(it.y) + 'px';
+    }
+    game.items = game.items.filter((it) => !it.gone);
+  } else {
+    game.jump -= dt;
+    if (game.jump <= 0) moveRushYarn(game.items[0]);
+  }
+  if (game.left <= 0) { endGame(); return; }
+  game.raf = requestAnimationFrame(gameFrame);
+}
+function stopGame() {
+  game.running = false;
+  cancelAnimationFrame(game.raf);
+}
+function endGame() {
+  stopGame();
+  const r = G.finishGame(state, game.id, game.score);
+  save();
+  $('game-stage').textContent = '';
+  showGamePanel('SCORE ' + game.score, '+' + r.tickets + (r.tickets === 1 ? ' ticket' : ' tickets') + (r.best ? ' · NEW BEST!' : ' · best ' + (state.arcade.best[game.id] || 0) + '.'));
+  $('game-go').textContent = $('game-go').disabled ? 'NO PLAYS LEFT' : 'AGAIN · ' + $('game-go').textContent.replace('START · ', '');
+  render();
 }
 
 /** A toast when a badge is earned. */
@@ -1271,7 +1457,7 @@ const YARN_MIN = 360, YARN_MAX = 600, YARN_ROLL_MS = 7000;
 ui.yarnIn = YARN_MIN + Math.random() * (YARN_MAX - YARN_MIN);
 function tickYarn(dt) {
   const yarn = $('gold-yarn');
-  const quiet = $('boot').hidden && $('lesson').hidden && $('confirm').hidden && $('play').hidden && $('move').hidden && $('shift').hidden;
+  const quiet = $('boot').hidden && $('lesson').hidden && $('confirm').hidden && $('play').hidden && $('move').hidden && $('shift').hidden && $('game').hidden;
   if (!state.cat || document.hidden || !yarn.hidden || !quiet || ui.view === 'store') return;
   ui.yarnIn -= dt;
   if (ui.yarnIn > 0) return;
@@ -1312,6 +1498,7 @@ function render() {
   set($('screen-store'), 'hidden', ui.view !== 'store');
   set($('screen-crew'), 'hidden', ui.view !== 'crew');
   set($('screen-hq'), 'hidden', ui.view !== 'hq');
+  set($('screen-arcade'), 'hidden', ui.view !== 'arcade');
   const reached = G.checkGoal(state);
   if (reached >= 1) save();
   if (reached === 1) { showStoreUnlock(); ui.introDue = 'crew'; }
@@ -1320,6 +1507,7 @@ function render() {
   maybeShowIntro();
   if (ui.view === 'crew') renderCrew();
   if (ui.view === 'hq') renderHQ();
+  if (ui.view === 'arcade') renderArcade();
   announceBadges();
   renderShift();
   if (ui.view === 'factory') renderFactory();

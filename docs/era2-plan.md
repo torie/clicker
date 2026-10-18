@@ -120,10 +120,17 @@ The balance sim needs a model of badges per hour for each wing before levels 4�
   (Arcade, Contracts and Lab say COMING SOON), and the profile (name, id, event count, test flag). The level bar
   shows "BADGES n / m". Badges are earned in `step` (`checkBadges`) and toasted. The profile, event log
   (`s.events`, levels, badges, trips) and test flag (codes and presets) are in the save.
-- **Expeditions badges** for now: finish 1 / 4 / 10 night shifts (any length). The server room and quest chains
-  come with step 2.
-- **While wings are missing**, `badgeNeed` shrinks the requirement in proportion to the badges that exist: with
-  only Expeditions (3 badges) levels 4–8 need 1 / 1 / 2 / 3 / 3; with all four wings, 1 / 2 / 4 / 6 / 8.
-- **Pacing with one wing** (sim, sending up to 3 underlings at a time): levels 4–8 take 33 / 2 / 28 / 60 / 0 min.
-  Trip timers set the pace and points race ahead while waiting, so some levels arrive at once. This evens out as
-  the Arcade and Contracts add faster badges.
+- **Expeditions (step 2, built):** badges for sending a first night shift, finishing 4, finishing 10. A
+  fourth place, **the roof** (4 h, 3 items), opens with the silver badge. **Side-quests** (`QUESTS`): chains of
+  trips to given places, told as terminal story lines in the loot, with a reward per step. One runs at a time:
+  "The lost blueprint" (silo → fields → silo → server room; ends with a blueprint for every factory), then "The
+  catnip smugglers" (fields → roof → server room → fields; ends with +10% all income). The trip sheet marks the
+  quest's place with ★, and HQ shows the running quest under the wings.
+- **Arcade (step 3, built):** opens with the first badge. Two 30-second mini-games: **Conveyor sort** (tap the
+  glitches falling to the silo, not the clicks) and **Yarn rush** (catch the jumping yarn; a miss costs a point).
+  3 plays, one back every 20 min. Every 2 points scored is a ticket; prizes: golden spool 15, blueprint 30, free
+  wooden crate 50. Badges: score 10 in any game, 16 in Conveyor sort, 30 in Yarn rush. (A bot that taps every
+  glitch scores ~22 in Conveyor sort.) The weekly cup waits for the league.
+- **Badge needs** with two wings built (6 badges): levels 4–8 need 1 / 2 / 3 / 5 / 6.
+- **Pacing** (sim: up to 3 underlings away, every arcade play used, scores 15–39): levels 4–8 take about
+  15 / 16 / 13 / 20 / 60 min; a slower player 20 / 20 / 20 / 23 / 37. Level 8 waits for the last badge.

@@ -63,9 +63,11 @@ export const BADGE_NEED = [1, 2, 4, 6, 8];   // badges needed for levels 4..8
 export const BADGE_NAMES = ['Bronze', 'Silver', 'Gold'];
 export const WINGS = [
   {id: 'exp', name: 'Expeditions', desc: 'Send underlings on night shifts for loot', built: true, opensAt: 3,
-    badges: [{k: 'trips', at: 1, text: 'Finish a night shift'}, {k: 'trips', at: 4, text: 'Finish 4 night shifts'},
+    badges: [{k: 'sent', at: 1, text: 'Send an underling on a night shift'}, {k: 'trips', at: 4, text: 'Finish 4 night shifts'},
       {k: 'trips', at: 10, text: 'Finish 10 night shifts'}]},
-  {id: 'arc', name: 'Arcade', desc: 'Mini-games, tickets and a weekly cup', built: false, opensAt: 3, opensText: 'your first badge'},
+  {id: 'arc', name: 'Arcade', desc: 'Mini-games for tickets and prizes', built: true, opensAt: 3, opensText: 'your first badge',
+    badges: [{k: 'arcBest', at: 10, text: 'Score 10 in any arcade game'}, {k: 'sortBest', at: 16, text: 'Score 16 in Conveyor sort'},
+      {k: 'rushBest', at: 30, text: 'Score 30 in Yarn rush'}]},
   {id: 'con', name: 'Contracts', desc: 'Timed goals with a twist', built: false, opensAt: 4, opensText: 'level 4'},
   {id: 'lab', name: 'Lab', desc: 'Research perks and automation', built: false, opensAt: 5, opensText: 'level 5'}
 ];      // ×1.5 to all income for every level from 4 on (keep the teasers in step)
@@ -126,15 +128,34 @@ export const SUB_NAMES = ['Bit', 'Byte', 'Pip', 'Dot', 'Nib', 'Jot', 'Zip', 'Fig
 export const TRIPS = [
   {id: 'silo', name: 'The old silo', secs: 1800, items: 1},
   {id: 'fields', name: 'The catnip fields', secs: 7200, items: 2},
-  {id: 'server', name: 'The server room', secs: 28800, items: 4}
+  {id: 'server', name: 'The server room', secs: 28800, items: 4},
+  {id: 'roof', name: 'The roof', secs: 14400, items: 3, needs: 2}   // opens with the Expeditions silver badge
 ];
 // Loot, with weights per trip (longer trips find more blueprints).
 export const LOOT = [
-  {id: 'crate', name: 'Crate of clicks', weights: [5, 4, 3]},
-  {id: 'spool', name: 'Golden spool', weights: [3, 3, 2]},
-  {id: 'blueprint', name: 'Blueprint', weights: [1, 2, 3]},
-  {id: 'treat', name: 'Treat', weights: [2, 2, 2]}
+  {id: 'crate', name: 'Crate of clicks', weights: [5, 4, 3, 3]},
+  {id: 'spool', name: 'Golden spool', weights: [3, 3, 2, 4]},
+  {id: 'blueprint', name: 'Blueprint', weights: [1, 2, 3, 3]},
+  {id: 'treat', name: 'Treat', weights: [2, 2, 2, 2]}
 ];
+// Side-quests: chains of trips to given places, told as a story on the terminal. One quest runs at a time,
+// in order; each step is done by opening the loot of a trip to its place, and pays a reward on top.
+// Rewards: {spools, bp (blueprints on a random factory), bpAll (on every factory), part: [type, value]}.
+export const QUESTS = [
+  {id: 'blueprint', name: 'The lost blueprint', steps: [
+    {t: 0, text: 'In the old silo, Bit finds a torn corner of a blueprint. The rest must be somewhere.', reward: {spools: 1}},
+    {t: 1, text: 'A second piece is tangled in the catnip. It shows a press nobody has ever built.', reward: {bp: 1}},
+    {t: 0, text: 'Back at the silo, a hatch under the floor. Inside: the third piece, and a key.', reward: {bp: 2}},
+    {t: 2, text: 'The key fits a rack in the server room. The last piece was printed there years ago.', reward: {bpAll: 1}, last: 'THE GOLDEN BLUEPRINT: EVERY FACTORY ×1.1 FOR GOOD'}
+  ]},
+  {id: 'smugglers', name: 'The catnip smugglers', steps: [
+    {t: 1, text: 'Paw prints in the catnip fields lead somewhere. Somebody is taking catnip by night.', reward: {spools: 1}},
+    {t: 3, text: 'From the roof you can see them: a line of cats carrying sacks towards the server room.', reward: {part: ['xp', 0.1]}},
+    {t: 2, text: 'Behind the servers, a hideout full of catnip and one very sleepy cat.', reward: {bp: 2}},
+    {t: 1, text: 'The smugglers return the catnip, and ask for a job. Your crew is happy to share.', reward: {part: ['all', 0.1]}, last: 'THE SMUGGLERS JOIN: ALL INCOME +10% FOR GOOD'}
+  ]}
+];
+
 export const CRATE_SECS = 900;       // a crate holds 15 minutes of income
 export const BP_STEP = 1.1;          // each blueprint: its factory ×1.1 for good
 export const MAX_SPOOLS = 5;         // golden spools: a golden yarn frenzy whenever you like
@@ -157,6 +178,22 @@ export const TRACKS = [
   {id: 'lullaby', name: 'Lullaby.exe', price: 1e7}
 ];
 
+// The Arcade wing: 30-second mini-games (played in main.js; the rules only see the score). Plays refill over
+// time, so it stays a short-session thing. Scores earn tickets for prizes.
+export const ARCADE_GAMES = [
+  {id: 'sort', name: 'Conveyor sort', desc: 'Tap the glitches before they reach the silo. Leave the clicks alone.'},
+  {id: 'rush', name: 'Yarn rush', desc: 'Catch the yarn ball as often as you can. Missing costs a point.'}
+];
+export const ARCADE_SECS = 30;
+export const PLAYS_MAX = 3;
+export const PLAY_REFILL = 1200;     // one play back every 20 minutes
+export const PRIZES = [
+  {id: 'spool', name: 'Golden spool', desc: 'A yarn ×5 frenzy whenever you like', cost: 15},
+  {id: 'bp', name: 'Blueprint', desc: 'A random factory ×1.1 for good', cost: 30},
+  {id: 'box', name: 'Wooden crate', desc: 'A free wooden crate, opened on the spot', cost: 50}
+];
+export const ticketsFor = (score) => Math.floor(Math.max(0, score) / 2);
+
 // The player's profile and an event log for the friends league (built later). `test` marks a save that used
 // a play-test code or preset: it won't count in the league.
 const newId = () => Array.from({length: 8}, () => '0123456789ABCDEF'[Math.floor(Math.random() * 16)]).join('');
@@ -167,12 +204,13 @@ export function newGame() {
     storeOpen: false, crew: [], recruit: null, spools: 0, parts: {}, subRecruit: null, care: {day: '', done: []}, happy: 0, frenzy: 0, away: false,
     seed: Math.floor(Math.random() * 2 ** 31), rolls: 0, skins: ['classic'], skin: 'classic', tracks: ['silo'], track: 'silo', savedAt: Date.now(),
     stats: newStats(), feats: [], log: [], released: {classic: 0}, fresh: [],
-    badges: {}, profile: {id: newId(), name: ''}, events: [], test: false};
+    badges: {}, profile: {id: newId(), name: ''}, events: [], test: false, quest: {i: 0, step: 0},
+    arcade: {plays: PLAYS_MAX, at: 0, tickets: 0, best: {}}};
 }
 
 // Counters behind the skin unlocks. `play` is seconds of active play; the *Run ones are current streaks.
 const STAT_KEYS = ['taps', 'lucky', 'play', 'collects', 'upg', 'ext', 'yarn', 'ftaps', 'care', 'happy', 'streak', 'streakMax',
-  'promos', 'moves', 'back', 'luckyRun', 'yarnRun', 'burst', 'trips', 'boxes', 'tripsLong'];
+  'promos', 'moves', 'back', 'luckyRun', 'yarnRun', 'burst', 'trips', 'boxes', 'tripsLong', 'quests', 'games', 'sent'];
 const newStats = () => Object.fromEntries(STAT_KEYS.map((k) => [k, 0]));
 
 export function newFactory(i) {
@@ -336,11 +374,48 @@ export const tripBack = (u, now) => tripLeft(u, now) === 0;
 /** Underlings back with loot, as [kitten index, slot] pairs. */
 export const tripsReady = (s, now) => s.crew.flatMap((k, n) => subs(k).map((u, j) => (tripBack(u, now) ? [n, j] : null)).filter(Boolean));
 
+/** Places open from the start, except those that need an Expeditions badge (`needs`). */
+export const tripOpen = (s, t) => !!TRIPS[t] && (s.badges.exp || 0) >= (TRIPS[t].needs || 0);
+
+/** The running quest and its step, or null when every quest is done. */
+export function questNow(s) {
+  const q = QUESTS[s.quest.i];
+  return q ? {q, i: s.quest.i, step: q.steps[s.quest.step], n: s.quest.step} : null;
+}
+function questReward(s, r) {
+  if (r.spools) s.spools = Math.min(MAX_SPOOLS, s.spools + r.spools);
+  if (r.bp && s.facs.length) for (let i = 0; i < r.bp; i++) { const f = s.facs[Math.floor(rand(s) * s.facs.length)]; f.bp = (f.bp || 0) + 1; }
+  if (r.bpAll) for (const f of s.facs) f.bp = (f.bp || 0) + r.bpAll;
+  if (r.part) s.parts[r.part[0]] = (s.parts[r.part[0]] || 0) + r.part[1];
+}
+/** Text for a quest reward, for the loot list. */
+export function rewardText(r) {
+  return [r.spools && r.spools + ' GOLDEN SPOOL', r.bp && r.bp + (r.bp === 1 ? ' BLUEPRINT' : ' BLUEPRINTS'), r.bpAll && 'A BLUEPRINT FOR EVERY FACTORY',
+    r.part && '+' + Math.round(r.part[1] * 100) + '% ' + BONUSES[r.part[0]].label.toUpperCase() + ' FOR GOOD'].filter(Boolean).join(' · ');
+}
+/** A trip to place t came back: advances the running quest if that's its place. Returns the story lines. */
+function questTrip(s, t) {
+  const now = questNow(s);
+  if (!now || now.step.t !== t) return [];
+  questReward(s, now.step.reward);
+  const out = [{id: 'quest', text: now.q.name.toUpperCase() + ' ' + (now.n + 1) + '/' + now.q.steps.length + ' · ' + now.step.text},
+    {id: 'quest', text: 'QUEST REWARD · ' + rewardText(now.step.reward)}];
+  if (now.n + 1 < now.q.steps.length) s.quest = {i: now.i, step: now.n + 1};
+  else {
+    out.push({id: 'quest', text: 'QUEST COMPLETE · ' + now.step.last});
+    s.quest = {i: now.i + 1, step: 0};
+    s.stats.quests++;
+    logEvent(s, 'quest', now.q.id);
+  }
+  return out;
+}
+
 /** Sends underling j of kitten n on trip t. */
 export function sendTrip(s, n, j, t, now) {
   const k = s.crew[n], u = k && subs(k)[j];
-  if (!underlingsOn(s) || !u || u.trip || !TRIPS[t]) return false;
+  if (!underlingsOn(s) || !u || u.trip || !tripOpen(s, t)) return false;
   u.trip = {t, back: now + TRIPS[t].secs * 1000};
+  s.stats.sent++;
   syncCrew(s);
   return true;
 }
@@ -376,8 +451,9 @@ export function openTrip(s, n, j, now) {
       out.push({id: 'blueprint', text: 'BLUEPRINT · FACTORY #' + (f.i + 1) + ' ×' + BP_STEP + ' FOR GOOD'});
     }
   }
+  out.push(...questTrip(s, t));
   s.stats.trips++;
-  if (t === TRIPS.length - 1) s.stats.tripsLong++;
+  if (TRIPS[t].secs >= 28800) s.stats.tripsLong++;
   logEvent(s, 'trip', t);
   syncCrew(s);
   return out;
@@ -615,6 +691,57 @@ export function checkBadges(s) {
   return out;
 }
 
+// ---------- era 2: the Arcade ----------
+
+/** Plays come back one every PLAY_REFILL seconds, up to PLAYS_MAX. `now` is the wall clock in ms. */
+export function refillPlays(s, now) {
+  const a = s.arcade;
+  if (a.plays >= PLAYS_MAX) { a.at = now; return a.plays; }
+  const n = Math.floor((now - a.at) / (PLAY_REFILL * 1000));
+  if (n > 0) {
+    a.plays = Math.min(PLAYS_MAX, a.plays + n);
+    a.at = a.plays >= PLAYS_MAX ? now : a.at + n * PLAY_REFILL * 1000;
+  }
+  return a.plays;
+}
+/** Seconds until the next play comes back (0 when full). */
+export const nextPlayIn = (s, now) => (s.arcade.plays >= PLAYS_MAX ? 0 : Math.max(0, (s.arcade.at + PLAY_REFILL * 1000 - now) / 1000));
+/** Uses a play to start a game. */
+export function startGame(s, id, now) {
+  if (!wingOpen(s, WINGS[1]) || !ARCADE_GAMES.some((g) => g.id === id) || refillPlays(s, now) < 1) return false;
+  if (s.arcade.plays === PLAYS_MAX) s.arcade.at = now;
+  s.arcade.plays--;
+  return true;
+}
+/** A game is over: tickets, best score, an event for the league. Returns {tickets, best: true if a new best}. */
+export function finishGame(s, id, score) {
+  score = Math.max(0, Math.floor(score));
+  const tickets = ticketsFor(score), best = score > (s.arcade.best[id] || 0);
+  s.arcade.tickets += tickets;
+  if (best) s.arcade.best[id] = score;
+  s.stats.games++;
+  logEvent(s, 'arcade', id + ':' + score);
+  checkBadges(s);
+  return {tickets, best};
+}
+/** Buys a prize with tickets. Returns the loot lines, or null. */
+export function buyPrize(s, id) {
+  const p = PRIZES.find((x) => x.id === id);
+  if (!p || s.arcade.tickets < p.cost || (id === 'spool' && (!s.cat || s.spools >= MAX_SPOOLS)) || (id === 'bp' && !s.facs.length)) return null;
+  s.arcade.tickets -= p.cost;
+  if (id === 'spool') { s.spools++; return [{cls: 0, text: 'A GOLDEN SPOOL'}]; }
+  if (id === 'bp') {
+    const f = s.facs[Math.floor(rand(s) * s.facs.length)];
+    f.bp = (f.bp || 0) + 1;
+    syncCrew(s);
+    return [{cls: 0, text: 'BLUEPRINT · FACTORY #' + (f.i + 1) + ' ×' + BP_STEP + ' FOR GOOD'}];
+  }
+  const b = BOXES[1], out = [];
+  for (let n = 0; n < b.items; n++) out.push(boxItem(s, rollWeighted(s, b.odds)));
+  syncCrew(s);
+  return out.sort((a, z) => z.cls - a.cls);
+}
+
 /** Appends to the event log the friends league will upload. */
 export function logEvent(s, kind, value) {
   s.events.push({t: Date.now(), k: kind, v: value});
@@ -674,6 +801,9 @@ export function statValue(s, k) {
     case 'tracks': return s.tracks.length - 1;
     case 'level': return s.goalIdx;
     case 'streak': return s.stats.streakMax;
+    case 'arcBest': return Math.max(0, ...Object.values(s.arcade.best));
+    case 'sortBest': return s.arcade.best.sort || 0;
+    case 'rushBest': return s.arcade.best.rush || 0;
     default: return s.stats[k] || 0;
   }
 }
@@ -869,7 +999,8 @@ export function serialize(s) {
     skins: [...s.skins], skin: s.skin,
     tracks: [...s.tracks], track: s.track, savedAt: s.savedAt,
     stats: {...s.stats}, feats: [...s.feats], log: [...s.log], released: {...s.released}, fresh: [...s.fresh],
-    badges: {...s.badges}, profile: {...s.profile}, events: s.events.map((e) => ({...e})), test: s.test};
+    badges: {...s.badges}, profile: {...s.profile}, events: s.events.map((e) => ({...e})), test: s.test, quest: {...s.quest},
+    arcade: {...s.arcade, best: {...s.arcade.best}}};
 }
 
 /** Keeps only known ids, always includes the free first item, and falls back to it if the selection isn't owned. */
@@ -963,6 +1094,14 @@ export function deserialize(data) {
   s.events = (Array.isArray(data.events) ? data.events : []).filter((e) => e && typeof e.t === 'number' && typeof e.k === 'string')
     .slice(-MAX_EVENTS).map((e) => ({t: e.t, k: e.k.slice(0, 12), v: typeof e.v === 'number' || typeof e.v === 'string' ? e.v : 0}));
   s.test = data.test === true;
+  const ar = data.arcade && typeof data.arcade === 'object' ? data.arcade : {};
+  s.arcade.plays = 'plays' in ar ? int(ar.plays, PLAYS_MAX) : PLAYS_MAX;
+  s.arcade.at = num(ar.at);
+  s.arcade.tickets = int(ar.tickets, 1e6);
+  for (const g of ARCADE_GAMES) if (ar.best && num(ar.best[g.id]) > 0) s.arcade.best[g.id] = int(ar.best[g.id], 1000);
+  const q = data.quest && typeof data.quest === 'object' ? data.quest : {};
+  s.quest.i = int(q.i, QUESTS.length);
+  s.quest.step = QUESTS[s.quest.i] ? int(q.step, QUESTS[s.quest.i].steps.length - 1) : 0;
   s.tracks = ownedList(TRACKS, data.tracks);
   s.track = s.tracks.includes(data.track) ? data.track : TRACKS[0].id;
   s.frenzy = s.cat ? Math.min(num(data.frenzy), FRENZY_SECONDS * (1 + bonus(s, 'yarn'))) : 0;
