@@ -24,6 +24,7 @@ if (preset) {
   try {
     const data = await fetch('test/presets/' + preset[1] + '.json', { cache: 'no-store' }).then((r) => r.json());
     data.savedAt = Date.now(); // no offline progress
+    data.test = true; // presets don't count in the friends league
     store.set(SAVE_KEY, JSON.stringify(data));
   } catch { /* unknown preset: keep the current save */ }
   history.replaceState(null, '', location.pathname + location.search);
@@ -245,6 +246,16 @@ function renderMain() {
   set($('goal-left'), 'text', G.fmt(need) + ' TO GO');
   set($('goal-eta'), 'text', G.fmtEta(inc ? need / inc : Infinity));
   set($('goal-teaser'), 'text', goal.teaser);
+  // Era 2: levels 4-8 need badges too; the HQ link leads to the wings.
+  const needB = done ? 0 : G.badgeNeed(s.goalIdx), haveB = G.badgeCount(s);
+  set($('goal-badges'), 'hidden', !needB);
+  if (needB) {
+    set($('goal-badges-text'), 'text', 'BADGES ' + Math.min(haveB, needB) + ' / ' + needB + (haveB >= needB ? ' · OK' : ' · EARN THEM IN HQ'));
+    set($('goal-badges-dots'), 'text', '●'.repeat(Math.min(haveB, needB)) + '○'.repeat(Math.max(0, needB - haveB)));
+    if (reached && haveB < needB) set($('goal-eta'), 'text', 'NEEDS BADGES');
+  }
+  set($('open-hq'), 'hidden', !G.era2On(s));
+  if (G.era2On(s)) set($('hq-link-note'), 'text', haveB + (haveB === 1 ? ' BADGE' : ' BADGES'));
 
   // Buildings
   syncFactoryRows();
@@ -1122,6 +1133,76 @@ function renderStore() {
   });
 }
 
+// ---------- era 2: HQ ----------
+
+function openHQ() {
+  ui.view = 'hq';
+  render();
+  $('hq-back').focus({ preventScroll: true });
+}
+$('open-hq').addEventListener('click', openHQ);
+$('hq-back').addEventListener('click', () => { ui.view = 'main'; render(); });
+const wingRows = G.WINGS.map((w) => {
+  const r = makeRow(() => { if (w.id === 'exp' && G.wingOpen(state, w)) openCrew(); });
+  r.el.classList.add('wing');
+  $('wing-rows').appendChild(r.el);
+  return r;
+});
+$('profile-name').addEventListener('change', (e) => { G.setName(state, e.target.value); e.target.value = state.profile.name; save(); });
+const badgeDots = (n, of) => '●'.repeat(n) + '○'.repeat(of - n);
+function renderHQ() {
+  const s = state;
+  if (!G.era2On(s)) { ui.view = 'main'; return; }
+  set($('hq-pts'), 'text', G.fmt(s.pts));
+  const done = G.finalGoalReached(s), goal = G.currentGoal(s), needB = done ? 0 : G.badgeNeed(s.goalIdx), haveB = G.badgeCount(s);
+  set($('hq-level'), 'text', done ? 'ERA 2 COMPLETE' : 'LEVEL ' + (s.goalIdx + 1) + ' · ' + goal.at.toLocaleString('en-US'));
+  set($('hq-pts-fill'), 'width', (done ? 100 : Math.min(100, 100 * s.pts / goal.at)).toFixed(1) + '%');
+  set($('hq-badge-fill'), 'width', (needB ? Math.min(100, 100 * haveB / needB) : 100).toFixed(1) + '%');
+  set($('hq-level-text'), 'text', done ? 'Every level is done. Era 3 is on its way.'
+    : 'Needs ' + G.fmt(goal.at) + ' points' + (needB ? ' and ' + needB + (needB === 1 ? ' badge' : ' badges') + ' (you have ' + haveB + ')' : '') + '. ' + goal.teaser.replace('REWARD: ', 'Reward: ').toLowerCase().replace(/^reward/, 'Reward') + '.');
+  G.WINGS.forEach((w, i) => {
+    const r = wingRows[i], open = G.wingOpen(s, w), n = G.wingBadges(s, w), next = G.nextBadge(s, w);
+    setRow(r, {
+      cls: 'wing ' + (!w.built || !open ? 'locked no' : next ? 'ok' : 'maxed'),
+      disabled: !(w.id === 'exp' && open),
+      nm: w.name + (open && w.built ? ' ▸' : ''),
+      price: w.built ? badgeDots(n, w.badges.length) : '···',
+      ds: !w.built ? 'COMING SOON · ' + w.desc : !open ? 'Opens at ' + w.opensText : next ? G.BADGE_NAMES[next.tier].toUpperCase() + ': ' + next.text : 'ALL BADGES · ' + w.desc,
+      bar: open && next ? bar(next.progress) : ''
+    });
+  });
+  if (document.activeElement !== $('profile-name')) $('profile-name').value = s.profile.name;
+  set($('profile-info'), 'text', 'ID ' + s.profile.id + ' · ' + s.events.length + ' EVENTS SAVED FOR THE LEAGUE' + (s.test ? ' · TEST SAVE: WON\'T COUNT' : ''));
+}
+
+/** A toast when a badge is earned. */
+ui.badgeSeen = G.badgeCount(state);
+function announceBadges() {
+  const n = G.badgeCount(state);
+  if (n <= ui.badgeSeen) { ui.badgeSeen = n; return; }
+  ui.badgeSeen = n;
+  const e = [...state.events].reverse().find((x) => x.k === 'badge');
+  const [wid, tier] = e ? String(e.v).split(':') : ['exp', '0'];
+  const w = G.WINGS.find((x) => x.id === wid) || G.WINGS[0];
+  showToast(G.BADGE_NAMES[+tier].toUpperCase() + ' BADGE · ' + w.name.toUpperCase() + ' · ' + n + (n === 1 ? ' BADGE' : ' BADGES'));
+}
+
+/** Shown once, the moment the player reaches level 3 (100M). */
+function showEra2() {
+  const boot = $('boot');
+  boot.innerHTML =
+    '<span class="ln" style="animation-delay:.2s">&gt; 100,000,000 POINTS REACHED</span>' +
+    '<span class="ln" style="animation-delay:.9s">&gt; ERA 1 COMPLETE</span>' +
+    '<span class="ln title" style="animation-delay:1.6s">ERA 2</span>' +
+    '<span class="ln" style="animation-delay:2.2s">&gt; HQ IS OPEN: TAP "ERA 2 · HQ" UNDER THE LEVEL BAR</span>' +
+    '<span class="ln" style="animation-delay:2.8s">&gt; WINGS GIVE BADGES. LEVELS 4 TO 8 NEED BADGES AS WELL AS POINTS</span>' +
+    '<span class="ln" style="animation-delay:3.4s">&gt; FIRST WING: EXPEDITIONS. SEND AN UNDERLING ON A NIGHT SHIFT</span>' +
+    '<span class="ln next" style="animation-delay:4s">&gt; NEXT LEVEL: 1,000,000,000 + ' + G.badgeNeed(3) + ' BADGE</span>' +
+    '<button class="collect ln" id="boot-continue" style="animation-delay:4.6s">CONTINUE</button>';
+  boot.hidden = false;
+  $('boot-continue').addEventListener('click', () => { boot.hidden = true; ui.view = 'main'; render(); });
+}
+
 // ---------- overlays ----------
 
 const CAT_SVG = catSvg('classic', '#050705');
@@ -1166,12 +1247,19 @@ function showBoot() {
   });
 }
 
+// Toasts queue up, so two at once (a badge and a skin, say) both get read.
+const toasts = [];
 function showToast(text) {
+  if (toasts[toasts.length - 1] === text) return;
+  toasts.push(text);
+  if (toasts.length === 1) nextToast();
+}
+function nextToast() {
   const t = $('toast');
-  t.textContent = text;
+  if (!toasts.length) { t.hidden = true; return; }
+  t.textContent = toasts[0];
   t.hidden = false;
-  clearTimeout(showToast.timer);
-  showToast.timer = setTimeout(() => { t.hidden = true; }, 4500);
+  showToast.timer = setTimeout(() => { toasts.shift(); nextToast(); }, toasts.length > 1 ? 2500 : 4500);
 }
 
 $('adopt-desc').textContent = '1,000,000 · IT CLICKS FOR YOU ' + G.CAT_CPS + '×/SEC';
@@ -1223,13 +1311,16 @@ function render() {
   set($('screen-factory'), 'hidden', ui.view !== 'factory');
   set($('screen-store'), 'hidden', ui.view !== 'store');
   set($('screen-crew'), 'hidden', ui.view !== 'crew');
+  set($('screen-hq'), 'hidden', ui.view !== 'hq');
   const reached = G.checkGoal(state);
   if (reached >= 1) save();
   if (reached === 1) { showStoreUnlock(); ui.introDue = 'crew'; }
-  if (reached === 2) ui.introDue = 'subs';
+  if (reached === 2) { showEra2(); ui.introDue = 'subs'; }
   if (reached > 2) showToast('LEVEL ' + (reached + 1) + ' REACHED · ALL INCOME +' + Math.round((G.LEVEL_BONUS - 1) * 100) + '%');
   maybeShowIntro();
   if (ui.view === 'crew') renderCrew();
+  if (ui.view === 'hq') renderHQ();
+  announceBadges();
   renderShift();
   if (ui.view === 'factory') renderFactory();
   if (ui.view === 'store') renderStore();

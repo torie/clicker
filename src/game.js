@@ -53,7 +53,22 @@ export const GOALS = [
   {at: 1e12, teaser: 'REWARD: ALL INCOME +50%'},
   {at: 1e13, teaser: 'REWARD: ALL INCOME +50% · END OF ERA 1'}
 ];
-export const LEVEL_BONUS = 1.5;      // ×1.5 to all income for every level from 4 on (keep the teasers in step)
+export const LEVEL_BONUS = 1.5;
+
+// ---------- era 2 (docs/era2-plan.md) ----------
+// Era 2 opens at level 3 (100M): a hub, HQ, with four wings. Each wing has three badges (bronze, silver,
+// gold), and levels 4-8 need badges as well as points, so the side branches join back into the main line.
+// Only built wings count towards the requirement (`built`), so nobody waits on a wing that doesn't exist yet.
+export const BADGE_NEED = [1, 2, 4, 6, 8];   // badges needed for levels 4..8
+export const BADGE_NAMES = ['Bronze', 'Silver', 'Gold'];
+export const WINGS = [
+  {id: 'exp', name: 'Expeditions', desc: 'Send underlings on night shifts for loot', built: true, opensAt: 3,
+    badges: [{k: 'trips', at: 1, text: 'Finish a night shift'}, {k: 'trips', at: 4, text: 'Finish 4 night shifts'},
+      {k: 'trips', at: 10, text: 'Finish 10 night shifts'}]},
+  {id: 'arc', name: 'Arcade', desc: 'Mini-games, tickets and a weekly cup', built: false, opensAt: 3, opensText: 'your first badge'},
+  {id: 'con', name: 'Contracts', desc: 'Timed goals with a twist', built: false, opensAt: 4, opensText: 'level 4'},
+  {id: 'lab', name: 'Lab', desc: 'Research perks and automation', built: false, opensAt: 5, opensText: 'level 5'}
+];      // ×1.5 to all income for every level from 4 on (keep the teasers in step)
 
 // Golden yarn: after the cat arrives it sometimes rolls past (the UI decides when). Catching it
 // starts a frenzy: all income ×5 for a minute. Missing it costs nothing.
@@ -142,16 +157,22 @@ export const TRACKS = [
   {id: 'lullaby', name: 'Lullaby.exe', price: 1e7}
 ];
 
+// The player's profile and an event log for the friends league (built later). `test` marks a save that used
+// a play-test code or preset: it won't count in the league.
+const newId = () => Array.from({length: 8}, () => '0123456789ABCDEF'[Math.floor(Math.random() * 16)]).join('');
+export const MAX_EVENTS = 500;
+
 export function newGame() {
   return {v: 1, pts: 0, best: 0, total: 0, own: {auto: 0, x2: 0, x4: 0, luck: 0, power: 0, train: 0}, facs: [], goalIdx: 0, cat: false,
     storeOpen: false, crew: [], recruit: null, spools: 0, parts: {}, subRecruit: null, care: {day: '', done: []}, happy: 0, frenzy: 0, away: false,
     seed: Math.floor(Math.random() * 2 ** 31), rolls: 0, skins: ['classic'], skin: 'classic', tracks: ['silo'], track: 'silo', savedAt: Date.now(),
-    stats: newStats(), feats: [], log: [], released: {classic: 0}, fresh: []};
+    stats: newStats(), feats: [], log: [], released: {classic: 0}, fresh: [],
+    badges: {}, profile: {id: newId(), name: ''}, events: [], test: false};
 }
 
 // Counters behind the skin unlocks. `play` is seconds of active play; the *Run ones are current streaks.
 const STAT_KEYS = ['taps', 'lucky', 'play', 'collects', 'upg', 'ext', 'yarn', 'ftaps', 'care', 'happy', 'streak', 'streakMax',
-  'promos', 'moves', 'back', 'luckyRun', 'yarnRun', 'burst', 'trips', 'boxes'];
+  'promos', 'moves', 'back', 'luckyRun', 'yarnRun', 'burst', 'trips', 'boxes', 'tripsLong'];
 const newStats = () => Object.fromEntries(STAT_KEYS.map((k) => [k, 0]));
 
 export function newFactory(i) {
@@ -356,6 +377,8 @@ export function openTrip(s, n, j, now) {
     }
   }
   s.stats.trips++;
+  if (t === TRIPS.length - 1) s.stats.tripsLong++;
+  logEvent(s, 'trip', t);
   syncCrew(s);
   return out;
 }
@@ -459,6 +482,7 @@ export function step(s, dt) {
   if (crewOn(s)) tickXp(s, dt);
   if (!s.away) s.stats.play += dt;
   releaseSkins(s);
+  checkBadges(s);
 }
 
 /** Power tap's part of every tap: a share of the income per second. Lucky clicks don't multiply it. */
@@ -550,7 +574,54 @@ export function adoptCat(s) {
   s.pts -= GOALS[0].at;
   s.cat = true;
   s.goalIdx = 1;
+  logEvent(s, 'level', 1);
   return true;
+}
+
+// ---------- era 2: wings and badges ----------
+
+export const era2On = (s) => s.goalIdx >= 3;
+/** A wing is open once era 2 has reached its level (the Arcade waits for the first badge). */
+export function wingOpen(s, w) {
+  if (!era2On(s) || s.goalIdx < w.opensAt) return false;
+  return w.id === 'arc' ? badgeCount(s) > 0 : true;
+}
+export const wingBadges = (s, w) => s.badges[w.id] || 0;
+export const badgeCount = (s) => WINGS.reduce((a, w) => a + wingBadges(s, w), 0);
+/** Badges a player can earn today: the wings that are built. */
+export const badgesBuilt = () => WINGS.reduce((a, w) => a + (w.built ? w.badges.length : 0), 0);
+/** Badges needed for level index i (levels 4-8 are indexes 3-7). While some wings aren't built, the requirement
+ *  shrinks in proportion, so the last level needs every badge that exists and the earlier ones spread out. */
+export function badgeNeed(i) {
+  const need = i < 3 ? 0 : BADGE_NEED[i - 3] || 0, last = BADGE_NEED[BADGE_NEED.length - 1];
+  return Math.ceil(need * Math.min(1, badgesBuilt() / last));
+}
+/** The next badge of a wing and how far along it is, or null when the wing is done or not built. */
+export function nextBadge(s, w) {
+  const n = wingBadges(s, w), b = w.built && w.badges[n];
+  return b ? {...b, tier: n, progress: Math.min(1, statValue(s, b.k) / b.at)} : null;
+}
+/** Awards every badge whose condition is met (in order, one tier at a time). Returns [{wing, tier}] earned now. */
+export function checkBadges(s) {
+  const out = [];
+  if (!era2On(s)) return out;
+  for (const w of WINGS) {
+    for (let b = nextBadge(s, w); b && wingOpen(s, w) && b.progress >= 1; b = nextBadge(s, w)) {
+      s.badges[w.id] = b.tier + 1;
+      logEvent(s, 'badge', w.id + ':' + b.tier);
+      out.push({wing: w, tier: b.tier});
+    }
+  }
+  return out;
+}
+
+/** Appends to the event log the friends league will upload. */
+export function logEvent(s, kind, value) {
+  s.events.push({t: Date.now(), k: kind, v: value});
+  if (s.events.length > MAX_EVENTS) s.events.splice(0, s.events.length - MAX_EVENTS);
+}
+export function setName(s, name) {
+  s.profile.name = String(name).replace(/[^\w .-]/g, '').replace(/\s+/g, ' ').trim().slice(0, 16).trim();
 }
 
 /**
@@ -560,9 +631,10 @@ export function adoptCat(s) {
  */
 export function checkGoal(s) {
   const i = s.goalIdx;
-  if (i < 1 || i >= GOALS.length || s.pts < GOALS[i].at) return -1;
+  if (i < 1 || i >= GOALS.length || s.pts < GOALS[i].at || badgeCount(s) < badgeNeed(i)) return -1;
   if (i === 1) { s.storeOpen = true; startCrew(s); }
   s.goalIdx = i + 1;
+  logEvent(s, 'level', i + 1);
   if (underlingsOn(s) && !s.subRecruit) s.subRecruit = rollSub(s);
   syncCrew(s);
   return i;
@@ -750,7 +822,9 @@ const CODES = {
 /** Runs a code. Returns how many things it unlocked, or -1 for an unknown code. */
 export function redeemCode(s, code) {
   const run = CODES[String(code).trim().toLowerCase()];
-  return run ? run(s) : -1;
+  if (!run) return -1;
+  s.test = true; // play-test saves don't count in the friends league
+  return run(s);
 }
 
 export function buyTrack(s, id) {
@@ -794,7 +868,8 @@ export function serialize(s) {
     happy: s.happy, frenzy: s.frenzy, seed: s.seed, rolls: s.rolls, spools: s.spools, parts: {...s.parts},
     skins: [...s.skins], skin: s.skin,
     tracks: [...s.tracks], track: s.track, savedAt: s.savedAt,
-    stats: {...s.stats}, feats: [...s.feats], log: [...s.log], released: {...s.released}, fresh: [...s.fresh]};
+    stats: {...s.stats}, feats: [...s.feats], log: [...s.log], released: {...s.released}, fresh: [...s.fresh],
+    badges: {...s.badges}, profile: {...s.profile}, events: s.events.map((e) => ({...e})), test: s.test};
 }
 
 /** Keeps only known ids, always includes the free first item, and falls back to it if the selection isn't owned. */
@@ -880,6 +955,14 @@ export function deserialize(data) {
     else if (s.skins.includes(sk.id)) s.released[sk.id] = 0;
   }
   s.fresh = (Array.isArray(data.fresh) ? data.fresh : []).filter((id) => skinReleased(s, id) && !s.skins.includes(id));
+  const badges = data.badges && typeof data.badges === 'object' ? data.badges : {};
+  for (const w of WINGS) if (w.built && int(badges[w.id], w.badges.length) > 0) s.badges[w.id] = int(badges[w.id], w.badges.length);
+  const pr = data.profile && typeof data.profile === 'object' ? data.profile : {};
+  if (typeof pr.id === 'string' && /^[0-9A-F]{8}$/.test(pr.id)) s.profile.id = pr.id;
+  if (typeof pr.name === 'string') setName(s, pr.name);
+  s.events = (Array.isArray(data.events) ? data.events : []).filter((e) => e && typeof e.t === 'number' && typeof e.k === 'string')
+    .slice(-MAX_EVENTS).map((e) => ({t: e.t, k: e.k.slice(0, 12), v: typeof e.v === 'number' || typeof e.v === 'string' ? e.v : 0}));
+  s.test = data.test === true;
   s.tracks = ownedList(TRACKS, data.tracks);
   s.track = s.tracks.includes(data.track) ? data.track : TRACKS[0].id;
   s.frenzy = s.cat ? Math.min(num(data.frenzy), FRENZY_SECONDS * (1 + bonus(s, 'yarn'))) : 0;

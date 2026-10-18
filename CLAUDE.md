@@ -10,6 +10,7 @@ Phone-first incremental clicker game, shipped as a PWA on GitHub Pages. Plain HT
 - Commits and PRs are authored by the user only: **no `Co-Authored-By` trailer and no mention of Claude or any AI tool** in commits, PR titles, bodies or comments.
 - `DESIGN_PROMPT.md` (the original design brief) is kept local and is in `.gitignore`. Never commit it.
 - Commit or push only when the user asks.
+- [docs/game-map.md](docs/game-map.md) maps the levels, what each opens, the timescales and the weak spots. Update it whenever a level, system or unlock changes.
 - Keep the Phosphor look (below). Match the existing code's style: small pure functions in `game.js`, and DOM writes in `main.js` go through the cached `set()` helper.
 
 ## How the code is split
@@ -27,7 +28,7 @@ Phone-first incremental clicker game, shipped as a PWA on GitHub Pages. Plain HT
 | `scripts/balance-sim.mjs` | Greedy-player simulation against the real rules. Run it after any price or rate change. |
 | `scripts/make-icons.mjs` | Regenerates `icons/*.png` (pixel "+1" button). |
 
-Checks: `npm test` (49 tests, all passing), `node scripts/balance-sim.mjs [--skins 0|1 --taps N --collect S --daily 0|1 --yarn S --worth S --seed N --limit S --trace --load SAVE --save-at N --save-to FILE]`, `npm start` then open http://localhost:8080 at phone size. `#reset` on the URL wipes the save.
+Checks: `npm test` (51 tests, all passing), `node scripts/balance-sim.mjs [--skins 0|1 --taps N --collect S --daily 0|1 --yarn S --worth S --seed N --limit S --trace --load SAVE --save-at N --save-to FILE]`, `npm start` then open http://localhost:8080 at phone size. `#reset` on the URL wipes the save.
 
 ## Game design (decided with the user)
 
@@ -96,6 +97,7 @@ Checks: `npm test` (49 tests, all passing), `node scripts/balance-sim.mjs [--ski
     - a blueprint, a random factory ×1.1 for good (`f.bp`, multiplies `lineRate`).
   - Alerts: the paw badge shows how many underlings are back, the crew strip says so, member chips flash "LOOT!", and the welcome-back toast counts them.
   - Not modelled in `balance-sim.mjs` yet.
+- **Era 2** (from level 3; plan, decisions and status in [docs/era2-plan.md](docs/era2-plan.md)): HQ (`#screen-hq`, the "ERA 2 · HQ" button under the level bar) with four wings (Expeditions built; Arcade, Contracts, Lab coming). Each wing has bronze/silver/gold badges (`WINGS`, `checkBadges`), and levels 4–8 need badges as well as points (`badgeNeed`, scaled down while wings are missing). The save has a profile (`s.profile`: id + name), an event log for the friends league (`s.events`) and a test flag (`s.test`, set by codes and presets). The balance sim keeps up to 3 underlings on night shifts (`--trips 0` turns that off).
 - The user uses "levels" for these steps; the UI still says "GOAL n". Each level should end in a new stretch goal.
 - **Store** (`#screen-store`, opened from the amber bag icon in the header, next to the music button, so the goal meter stays visible). Tapping an item you don't own opens a **confirmation sheet** (`#confirm`: big preview, price, balance, ▶ preview for tracks, CANCEL / BUY). Nothing is bought without tapping BUY, and owned items switch with one tap:
   - **Cat skins (2026-10-15, the user's design):** 182 skins in six classes: **100 common, 50 rare, 20 epic, 8 mythic, 3 legendary, 1 broken legendary** (`CLASSES` in `src/wardrobe.js`).

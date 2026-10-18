@@ -1,5 +1,5 @@
 // Simulates a greedy player against the real rules in src/game.js, to tune prices.
-// Run: node scripts/balance-sim.mjs [--skins 1] [--taps 5] [--collect 20] [--daily 1] [--yarn 480] [--worth 300] [--seed 1] [--trace] [--load SAVE.json]
+// Run: node scripts/balance-sim.mjs [--skins 1] [--trips 1] [--taps 5] [--collect 20] [--daily 1] [--yarn 480] [--worth 300] [--seed 1] [--trace] [--load SAVE.json]
 //   [--save-at 950000 --save-to test/presets/precat.json]  (--trace lists every purchase; --save-at writes the
 //   save the first time the balance reaches that many points, for play-testing from that point)
 //
@@ -19,7 +19,7 @@ const arg = (name, d) => {
 const TRACE = process.argv.includes('--trace');
 // Like a real player, buys anything that pays for itself within WORTH seconds even when saving for the goal would be quicker.
 const WORTH = arg('worth', 300);
-const SKINS = arg('skins', 1);
+const SKINS = arg('skins', 1), TRIPS = arg('trips', 1);
 const TAPS = arg('taps', 5), COLLECT = arg('collect', 20), DAILY = arg('daily', 1), YARN = arg('yarn', 480), LIMIT = arg('limit', 8 * 3600);
 const SAVE_AT = arg('save-at', 0), SAVE_TO = process.argv[process.argv.indexOf('--save-to') + 1];
 const LOAD = process.argv.includes('--load') ? process.argv[process.argv.indexOf('--load') + 1] : null;
@@ -133,7 +133,7 @@ function arrange(s) {
 }
 
 // --load starts from a save (e.g. a preset) instead of a new game, at that save's level.
-const s = LOAD ? G.deserialize(JSON.parse(readFileSync(LOAD, 'utf8'))) : G.newGame(), log = [], stats = { moves: 0, cares: 0 };
+const s = LOAD ? G.deserialize(JSON.parse(readFileSync(LOAD, 'utf8'))) : G.newGame(), log = [], stats = { moves: 0, cares: 0, trips: 0 };
 if (!LOAD) s.seed = arg('seed', 1);
 // Management effort per goal: collecting a silo or caring for a kitten each count as one action.
 const phases = G.GOALS.map(() => ({ actions: 0, gap: 0 }));
@@ -145,7 +145,7 @@ for (const [gi, goal] of G.GOALS.entries()) {
   const start = t;
   goalNow = gi;
   lastBuy = t; // reaching a goal counts as an event: the wait is measured within each goal
-  while (s.pts < goal.at && t < LIMIT) {
+  while ((s.pts < goal.at || G.badgeCount(s) < G.badgeNeed(gi)) && t < LIMIT) {
     // Kittens end the collecting, which the income maths doesn't value, so the player hires one as
     // soon as they can afford it (cheapest factory first).
     for (let i = 0; i < s.facs.length && G.crewOn(s); i++) {
@@ -172,6 +172,16 @@ for (const [gi, goal] of G.GOALS.entries()) {
     t++;
     if (t % COLLECT === 0) s.facs.forEach((f, i) => { if (!f.kitOn && G.collect(s, i) > 0) phase().actions++; });
     if (YARN && s.cat && t % YARN === 0) { G.catchYarn(s); if (SKINS) G.markFeat(s, 'music'); }
+    // Night shifts for the era 2 badges: until the Expeditions wing is done, up to three underlings are away
+    // at a time (the first in each team) on the old silo. Loot is opened as soon as it's back.
+    if (TRIPS && G.underlingsOn(s)) {
+      const now = t * 1000;
+      for (const [n, j] of G.tripsReady(s, now)) { G.openTrip(s, n, j, now); stats.trips++; }
+      let away = s.crew.reduce((a, k) => a + (k.subs || []).filter((u) => u.trip).length, 0);
+      if (G.nextBadge(s, G.WINGS[0])) {
+        s.crew.forEach((k, n) => { if (away < 3 && (k.subs || []).length && !k.subs[0].trip && G.sendTrip(s, n, 0, 0, now)) away++; });
+      }
+    }
     if (DAILY && G.careReady(s, 'day 1')) {
       for (const c of G.CARE_STEPS) G.doCare(s, 'day 1', c);
       stats.cares++;
@@ -194,5 +204,5 @@ for (const [gi, goal] of G.GOALS.entries()) {
 console.log(`taps ${TAPS}/s, collect every ${COLLECT}s, ${DAILY ? 'does' : 'skips'} care time`);
 console.log(log.join('\n'));
 console.log(`crew after 10M: ${s.crew.map((k) => `${k.name} L${G.kittenLevel(k)}+${(k.subs || []).length} (${k.trait}, loves #${k.fav + 1}) at #${k.fac + 1} ×${G.kittenBoost(s, k, k.fac).toFixed(1)}`).join(', ')}; ` +
-  `${stats.moves} moves, care time ${stats.cares}×`);
+  `${stats.moves} moves, care time ${stats.cares}×, ${stats.trips} night shifts, badges ${G.badgeCount(s)}`);
 console.log('final:', JSON.stringify({ own: s.own, facs: s.facs.map(({ lines, turbo, silo, kit }) => [lines, turbo, silo, kit].join('')) }));

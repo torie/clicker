@@ -49,11 +49,13 @@
       <div class="line"><span class="nm" id="goal-title">LEVEL 1 &middot; 1,000,000</span><span class="vt goal-pct" id="goal-pct">0.0%</span></div>
       <div class="gbar"><span id="goal-fill"></span></div>
       <div class="line ds"><span id="goal-left"></span><span id="goal-eta"></span></div>
+      <div class="line ds goal-badges" id="goal-badges" hidden><span id="goal-badges-text"></span><span class="vt" id="goal-badges-dots"></span></div>
       <div class="ds teaser">&#9656; <span id="goal-teaser"></span></div>
+      <button class="hq-link" id="open-hq" hidden><span>ERA 2 &middot; HQ</span><span id="hq-link-note"></span><span class="vt" aria-hidden="true">&#9656;</span></button>
     </div>
     <button class="goalbtn" id="adopt" hidden><span class="vt">ADOPT THE CAT</span><small id="adopt-desc">1,000,000 &middot; IT CLICKS FOR YOU</small></button>
     <button class="crew-alert" id="crew-alert" hidden><span id="crew-alert-text"></span><span class="vt" aria-hidden="true">&#9656;</span></button>
-    <div class="goal done" id="goal-done" hidden><div class="line"><span class="nm" id="done-title">10,000,000,000,000 REACHED</span><span class="ds">ERA 2 &middot; SOON</span></div></div>
+    <div class="goal done" id="goal-done" hidden><div class="line"><span class="nm" id="done-title">10,000,000,000,000 REACHED</span><span class="ds">ERA 3 &middot; SOON</span></div></div>
 
     <main class="play">
       <div class="counter">
@@ -155,6 +157,32 @@
         </div>
       </div>
       <div class="rows" id="hire-rows"></div>
+    </div>
+  </section>
+
+  <section class="screen" id="screen-hq" aria-label="HQ" hidden>
+    <header class="top">
+      <button class="back" id="hq-back">&lt; BACK</button>
+      <span class="strong">HQ &middot; ERA 2</span>
+      <span>PTS <span class="vt hi" id="hq-pts">0</span></span>
+    </header>
+    <div class="store-body">
+      <div class="lesson-card hq-next">
+        <span class="sect">NEXT ON THE MAIN LINE</span>
+        <span class="nm" id="hq-level"></span>
+        <div class="need"><span>PTS</span><span class="meter"><span id="hq-pts-fill"></span></span></div>
+        <div class="need"><span>BADGES</span><span class="meter"><span id="hq-badge-fill"></span></span></div>
+        <p class="ds" id="hq-level-text"></p>
+      </div>
+      <h2>&gt; WINGS</h2>
+      <p class="store-note">Each wing has a bronze, a silver and a gold badge. Levels 4 to 8 need badges as well as points, so pick the wings you like.</p>
+      <div class="rows" id="wing-rows"></div>
+      <h2>&gt; PROFILE</h2>
+      <div class="profile-card">
+        <label class="ds" for="profile-name">YOUR NAME FOR THE FRIENDS LEAGUE</label>
+        <input class="code-input" id="profile-name" type="text" maxlength="16" autocomplete="off" spellcheck="false" placeholder="NAME">
+        <p class="ds" id="profile-info"></p>
+      </div>
     </div>
   </section>
 

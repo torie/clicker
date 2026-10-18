@@ -322,6 +322,45 @@ test('box upgrades add to the worn skin bonus', () => {
   assert.ok(Math.abs(G.tapGain(s) / plain - 1.15) < 1e-9);
 });
 
+test('era 2: badges come from the wings in order, levels 4-8 need them, capped at what is built', () => {
+  assert.deepEqual([3, 4, 5, 6, 7].map(G.badgeNeed), [1, 1, 2, 3, 3], 'only Expeditions is built: spread over its 3 badges');
+  const s = rich(1e9);
+  for (let i = 0; i < 5; i++) G.buildFactory(s);
+  Object.assign(s, { cat: true, goalIdx: 1, pts: 1e9 });
+  G.checkGoal(s); G.checkGoal(s);
+  assert.equal(G.era2On(s), true);
+  const exp = G.WINGS[0], arc = G.WINGS[1];
+  assert.equal(G.wingOpen(s, exp), true);
+  assert.equal(G.wingOpen(s, arc), false, 'the Arcade waits for the first badge');
+  assert.equal(G.checkGoal(s), -1, 'no badge yet');
+  s.stats.trips = 5;
+  assert.deepEqual(G.checkBadges(s).map((b) => b.tier), [0, 1], 'bronze and silver at once');
+  assert.equal(G.badgeCount(s), 2);
+  assert.equal(G.wingOpen(s, arc), true);
+  s.stats.trips = 10;
+  G.checkBadges(s);
+  assert.equal(G.wingBadges(s, exp), 3);
+  assert.equal(G.nextBadge(s, exp), null);
+  assert.equal(G.checkGoal(s), 3);
+  assert.ok(s.events.some((e) => e.k === 'badge') && s.events.some((e) => e.k === 'level' && e.v === 4));
+  const t = G.deserialize(JSON.parse(JSON.stringify(G.serialize(s))));
+  assert.deepEqual(t.badges, s.badges);
+  assert.equal(t.profile.id, s.profile.id);
+  assert.equal(t.events.length, s.events.length);
+});
+
+test('profile names are cleaned, and play-test codes mark the save', () => {
+  const s = G.newGame();
+  assert.match(s.profile.id, /^[0-9A-F]{8}$/);
+  G.setName(s, '  <Mochi>  the great cat!!  ');
+  assert.equal(s.profile.name, 'Mochi the great');
+  assert.equal(s.test, false);
+  G.redeemCode(s, 'nope');
+  assert.equal(s.test, false);
+  G.redeemCode(s, 'yumi');
+  assert.equal(s.test, true);
+});
+
 test('the code yumi unlocks every skin; unknown codes do nothing', () => {
   const s = rich(0);
   assert.equal(G.redeemCode(s, 'nope'), -1);
@@ -378,6 +417,8 @@ test('the levels go ×10 from 1M to 10T; 100M opens underlings and later levels 
   assert.ok(s.subRecruit, 'the first underling waits');
   assert.equal(G.levelBonus(s), 1);
   s.pts = 1e9;
+  assert.equal(G.checkGoal(s), -1, 'level 4 also needs a badge');
+  s.badges.exp = 3; // every badge that can be earned today
   assert.equal(G.checkGoal(s), 3);
   assert.equal(G.levelBonus(s), G.LEVEL_BONUS);
   for (let i = 4; i < G.GOALS.length; i++) { s.pts = G.GOALS[i].at; assert.equal(G.checkGoal(s), i); }
